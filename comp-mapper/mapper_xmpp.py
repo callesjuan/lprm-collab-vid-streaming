@@ -21,6 +21,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.send_presence(pstatus="")
 
   def handle_message(self, message):
+    logging.info(message)
     print message
     delay = message["delay"].get_stamp()
     if delay is None: # process only if it isn't an offline message
@@ -43,7 +44,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     if args["group"] is None:
       
     else:
-      
+
 
   def hnd_stream_pause(self, head, args):
     logging.info("stream_pause")
@@ -100,7 +101,7 @@ def main(argv):
   
   global client
 
-  jid = "ccs-context-mapper@localhost"
+  jid = "comp-mapper@localhost"
   pwd = "123"
 
   client = MapperXMPP(jid, pwd)

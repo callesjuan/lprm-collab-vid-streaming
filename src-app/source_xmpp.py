@@ -3,6 +3,11 @@ import json, sleekxmpp
 
 class SourceXMPP(sleekxmpp.ClientXMPP):
 
+  '''
+  CONSTANTS
+  '''
+  MAPPER_JID = 'comp-mapper@localhost'
+
   def __init__(self, jid, password):
     sleekxmpp.ClientXMPP.__init__(self, jid, password)
     self.register_plugin('xep_0004') # Data forms
@@ -33,12 +38,11 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       except:
         logging.warning("message error")
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
-    
-  '''
-  CONSTANTS
-  '''
-  MAPPER_JID = 'css-context-mapper@localhost'
 
+  def handle_func(self, str_func):
+    func = getattr(self, str_func)
+    func()
+    
   '''
   LISTENERS
   '''
@@ -46,16 +50,20 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   '''
   MESSAGES
   '''
-  def stream_init(self, to=self.MAPPER_JID, group=None):
+  def stream_init(self, to=None, group=None):
     logging.info("stream_init")
+    
+    if to is None:
+      to = self.MAPPER_JID
+    
     try:
       msg = {
         'func':'stream_init',
         'args': {}
-      })
+      }
       if group is not None:
         msg['args']['group'] = group
-      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg))
+      self.make_message(mto=to, mbody=json.dumps(msg)).send()
     except:
       logging.error("error")
 
@@ -106,6 +114,15 @@ def main(argv):
   signal.signal(signal.SIGINT, signal_handler)
 
   logging.basicConfig(filename='source_xmpp.log',level=logging.DEBUG)
+  
+  
+  root = logging.getLogger()
+  ch = logging.StreamHandler(sys.stdout)
+  ch.setLevel(logging.INFO)
+  formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+  ch.setFormatter(formatter)
+  root.addHandler(ch)
+  
   logging.info("source started")
   
   global client
@@ -134,10 +151,12 @@ def main(argv):
     client = SourceXMPP(jid, pwd)
     client.connect()
     client.process()
-    
+    time.sleep(1)
+     
     while True:
       try:
         msg_in = raw_input("msg:")
+        client.handle_func(msg_in)
         pass
       except KeyboardInterrupt, EOFError:
         client.disconnect(wait=True)

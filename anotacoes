@@ -1,0 +1,71 @@
+grouping before streaming (aborted because of possible delaying streams initiation)
+
+grouping after streaming
+- source A starts streaming (sends stream_init which initiates a group containing A only)
+- correlator looks for groups near A (receives stream_init from A)
+- correlator doesn't finds any groups
+- source B starts streaming (sends stream_init which initiates a group containing B only)
+- correlator looks for groups near B (receives stream_init from B)
+- correlator suggests B to join group A
+
+cases
+- first source
+- first source crashes and then it returns
+- first source crashes and doesn't returns
+- second source
+- second source crashes and then it returns
+- second source crashes and doesn't returns
+- first source crashes and then it returns
+- first source crashes and doesn't returns
+
+===========================================
+
+<iq to='room@conference.localhost' type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#items'/>
+</iq>
+
+<presence
+    to='room@conference.localhost/nick'/>
+
+<presence
+    to='asdf@conference.localhost'
+    type='unavailable'/>
+
+# DESNECESSÁRIO
+<presence
+    to='room@conference.localhost/root'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>
+
+<message to="ccs-context-mapper@localhost"
+type="chat">
+<body>{"func":"stream_init","args":{"grupo":"1"}}</body>
+</message>
+
+http://xmpp.org/extensions/xep-0045.html#grantmember
+
+messages
+
+sources
+-------
+stream_init (supplies hashtags and selected group, if selected)
+stream_resume
+stream_pause
+stream_close
+stream_exists (checks if stream session exists)
+group_join (leaves current group and joins selected group)
+group_leave (leaves current group and creates new unitary group)
+update_context (submits current geocoordinates, sensor data and battery level)
+update_hashtags (submits hashtag updates)
+
+viewer
+------
+
+===================
+
+stream_states_v3
+source_start_stream_v1
+group_states_v4
+group_states_v5
+viewer_states_v3
+
