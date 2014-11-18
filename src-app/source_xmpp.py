@@ -7,9 +7,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   CONSTANTS
   '''
   MAPPER_JID = 'comp-mapper@localhost'
+  MUC_JID = 'conference.localhost'
 
-  def __init__(self, jid, password):
-    sleekxmpp.ClientXMPP.__init__(self, jid, password)
+  def __init__(self, jid, pwd):
+    sleekxmpp.ClientXMPP.__init__(self, jid, pwd)
     self.register_plugin('xep_0004') # Data forms
     self.register_plugin('xep_0030') # Service discovery
     self.register_plugin('xep_0045') # Multi-user chat
@@ -18,6 +19,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.register_plugin('xep_0203') # Delayed delivery
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
+
+    self.jid = jid
+    self.nick = jid.split("@")[0]
+    self.pwd = pwd
+
+    self.hashtags = None
+    self.latlng = None
 
   def handle_start(self, event):
     logging.info("connected")
@@ -50,20 +58,21 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   '''
   MESSAGES
   '''
-  def stream_init(self, to=None, group=None):
+  def stream_init(self, hashtags):
     logging.info("stream_init")
-    
-    if to is None:
-      to = self.MAPPER_JID
-    
+
+    self.hashtags = hashtags
+    group_jid = self.hashtags + ":" + self.nick + "@" + self.MUC_JID
+
     try:
       msg = {
         'func':'stream_init',
-        'args': {}
+        'args': {
+          'group_jid': group_jid
+        }
       }
-      if group is not None:
-        msg['args']['group'] = group
-      self.make_message(mto=to, mbody=json.dumps(msg)).send()
+      self.make_presence(pto=(group_jid+"/"+self.nick)).send()
+      self.make_message(mto=MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
       logging.error("error")
 

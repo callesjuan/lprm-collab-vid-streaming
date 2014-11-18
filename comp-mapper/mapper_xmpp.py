@@ -41,10 +41,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
  
   def hnd_stream_init(self, head, args):
     logging.info("stream_init")
-    if args["group"] is None:
-      
-    else:
-
+    if args["group_jid"] is not None:
+      print "received"
+      print head
+      print args
 
   def hnd_stream_pause(self, head, args):
     logging.info("stream_pause")
