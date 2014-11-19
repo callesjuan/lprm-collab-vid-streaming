@@ -48,9 +48,20 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
 
   def handle_func(self, str_func):
-    func = getattr(self, str_func)
-    func()
+    arr_func = str_func.split(" ")
+    func = getattr(self, arr_func[0])
+    if len(arr_func) == 1:
+      func()
+    else:
+      func(arr_func[1])
     
+  def set_hashtags(self, hashtags):
+    self.hashtags = hashtags
+    print "set hashtags " + self.hashtags
+
+  def print_hashtags(self):
+    print self.hashtags
+
   '''
   LISTENERS
   '''
@@ -58,22 +69,25 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   '''
   MESSAGES
   '''
-  def stream_init(self, hashtags):
+  def stream_init(self):
     logging.info("stream_init")
 
-    self.hashtags = hashtags
-    group_jid = self.hashtags + ":" + self.nick + "@" + self.MUC_JID
+    group_jid = self.hashtags.replace("#", "") + self.nick.replace("-", "") + "@" + self.MUC_JID
 
     try:
       msg = {
         'func':'stream_init',
         'args': {
-          'group_jid': group_jid
+          'group_jid': group_jid,
+          'hashtags' : self.hashtags # self.hashtags.replace("#",";")
         }
       }
-      self.make_presence(pto=(group_jid+"/"+self.nick)).send()
-      self.make_message(mto=MAPPER_JID, mbody=json.dumps(msg)).send()
+      pto_jid = str(group_jid+"/"+self.nick)
+      self.make_presence(pto=pto_jid).send()
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      print "stream_initiated"
     except:
+      print sys.exc_info()
       logging.error("error")
 
   def stream_pause(self, head, args):
@@ -124,13 +138,14 @@ def main(argv):
 
   logging.basicConfig(filename='source_xmpp.log',level=logging.DEBUG)
   
-  
+  '''
   root = logging.getLogger()
   ch = logging.StreamHandler(sys.stdout)
   ch.setLevel(logging.INFO)
   formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
   ch.setFormatter(formatter)
   root.addHandler(ch)
+  '''
   
   logging.info("source started")
   
@@ -141,10 +156,8 @@ def main(argv):
     '''
     CONSOLE ARGS
     '''
-    
-    opts, args = getopt.getopt(argv, "j:p:", ['jid=', 'pwd='])
-    
-    if len(opts) != 2:
+    opts, args = getopt.getopt(argv, "j:p:h:", ['jid=', 'pwd=', 'hts='])
+    if len(opts) < 2 :
       raise Exception("missing arguments")
     
     for opt, arg in opts:
@@ -152,12 +165,16 @@ def main(argv):
         jid = arg
       if opt in ('-p', '--pwd'):
         pwd = arg
-        
+      if opt in ('-h', '--hts'):
+        hts = arg
+
     '''
     RUN
     '''
     
     client = SourceXMPP(jid, pwd)
+    if 'hts' in locals():
+      client.set_hashtags(hts)
     client.connect()
     client.process()
     time.sleep(1)
@@ -173,6 +190,7 @@ def main(argv):
     
   except Exception as e:
     logging.error("error")
+    sys.exc_info()
     sys.exit(0)
 
 if __name__ == '__main__':

@@ -28,7 +28,7 @@ cases
     to='room@conference.localhost/nick'/>
 
 <presence
-    to='asdf@conference.localhost'
+    to='room@conference.localhost'
     type='unavailable'/>
 
 # DESNECESSÁRIO

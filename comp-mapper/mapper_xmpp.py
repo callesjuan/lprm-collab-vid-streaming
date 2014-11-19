@@ -14,6 +14,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
 
+    self.sources = {}
+    self.groups = {}
+
   def handle_start(self, event):
     logging.info("connected")
     print "connected"
@@ -29,7 +32,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         jbody = json.loads(message["body"])
         func = getattr(self, "hnd_" + jbody["func"]) # gets reference for the application function
         args = jbody["args"] # application arguments
-        head = {'from':message["from"], 'to':message["to"]} # header arguments
+        head = {'from':str(message["from"]), 'to':str(message["to"])} # header arguments
         func(head, args)
       except:
         logging.warning("message error")
@@ -41,10 +44,29 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
  
   def hnd_stream_init(self, head, args):
     logging.info("stream_init")
-    if args["group_jid"] is not None:
-      print "received"
-      print head
-      print args
+    print "hnd_called"
+    print args
+    print args["hashtags"]
+    try:
+      if args["group_jid"] is not None:
+        source = head['from'].split("@")[0]
+        group = args['group_jid']
+        print "if" , source
+        if self.sources.has_key(source):
+          self.sources[source] = {}
+        print "endif"
+        self.sources[source]['latlng'] = None
+        self.sources[source]['hashtags'] = args['hashtags']
+        self.sources[source]['group'] = args['group_jid']
+        print source , " initiated"
+      
+        if self.groups.has_key(group):
+          self.groups[group] = {}
+        self.groups[group]['members'] = []
+        self.groups[group]['members'].append(source)
+        print group , " created"
+    except:
+      print sys.exc_info()
 
   def hnd_stream_pause(self, head, args):
     logging.info("stream_pause")
