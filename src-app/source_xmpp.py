@@ -62,6 +62,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   def print_hashtags(self):
     print self.hashtags
 
+  def set_latlng(self, latlng):
+    self.latlng = latlng
+    print "set latlgn " + self.latlng
+
+  def print_latlng(self):
+    print self.latlng
+
   '''
   LISTENERS
   '''
@@ -119,10 +126,16 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     logging.info("update_context")
     # publish current geolocation + sensor data + battery level
 
-  def update_hashtags(self, head, args):
+  def update_hashtags(self):
     logging.info("update_hashtags")
     # publish hashtag update
-    
+
+    try:
+      msg = {}
+      self.make_message(mto=self.MAPPER_JID)
+    except:
+      print sys.exc_info()
+
 '''
 CONSOLE
 '''
@@ -181,7 +194,7 @@ def main(argv):
      
     while True:
       try:
-        msg_in = raw_input("msg:")
+        msg_in = raw_input("> ")
         client.handle_func(msg_in)
         pass
       except KeyboardInterrupt, EOFError:

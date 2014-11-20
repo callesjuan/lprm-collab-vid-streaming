@@ -1,5 +1,5 @@
 import logging, signal, sys, time
-import json, sleekxmpp
+import json, pymongo, sleekxmpp
 
 class MapperXMPP(sleekxmpp.ClientXMPP):
 
@@ -16,6 +16,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
     self.sources = {}
     self.groups = {}
+
+    try:
+      self.mongo = pymongo.MongoClient('localhost', 27017)
+      self.db = mongo['lprm']
+    except:
+      print sys.exc_info()
 
   def handle_start(self, event):
     logging.info("connected")
@@ -44,23 +50,19 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
  
   def hnd_stream_init(self, head, args):
     logging.info("stream_init")
-    print "hnd_called"
-    print args
-    print args["hashtags"]
     try:
       if args["group_jid"] is not None:
         source = head['from'].split("@")[0]
         group = args['group_jid']
-        print "if" , source
-        if self.sources.has_key(source):
+        
+        if not self.sources.has_key(source):
           self.sources[source] = {}
-        print "endif"
         self.sources[source]['latlng'] = None
         self.sources[source]['hashtags'] = args['hashtags']
         self.sources[source]['group'] = args['group_jid']
         print source , " initiated"
       
-        if self.groups.has_key(group):
+        if not self.groups.has_key(group):
           self.groups[group] = {}
         self.groups[group]['members'] = []
         self.groups[group]['members'].append(source)
