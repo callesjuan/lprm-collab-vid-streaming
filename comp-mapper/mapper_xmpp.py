@@ -20,8 +20,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     try:
       self.mongo = pymongo.MongoClient('localhost', 27017)
       self.db = mongo['lprm']
+
     except:
       print sys.exc_info()
+      sys.exit(0)
 
   def handle_start(self, event):
     logging.info("connected")
