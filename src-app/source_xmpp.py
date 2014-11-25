@@ -78,12 +78,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   '''
   def stream_init(self, group_jid=None):
     logging.info("stream_init")
-
-    # group_jid = self.hashtags.replace("#", "") + self.nick.replace("-", "") + "@" + self.MUC_JID
-    if group_jid is None:
-      group_jid = self.hashtags + ";" + self.nick + "@" + self.MUCI_JID
-
+    print "initiating stream"
+    
     try:
+      # group_jid = self.hashtags.replace("#", "") + self.nick.replace("-", "") + "@" + self.MUC_JID
+      if group_jid is None:
+        group_jid = self.hashtags + ";" + self.nick + "@" + self.MUC_JID
+
       msg = {
         'func':'stream_init',
         'args': {

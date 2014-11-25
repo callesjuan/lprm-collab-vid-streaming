@@ -19,7 +19,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
     try:
       self.mongo = pymongo.MongoClient(mongo_uri)
-      self.db = mongo['lprm']
+      self.db = self.mongo['lprm']
 
       self.sources = self.db['sources']
       # if len(self.sources.index_information()) == 0:
@@ -28,7 +28,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.sources.ensure_index([('latlng', pymongo.GEO2D)])
 
       self.groups = self.db['groups']
-      self.groups.ensure_index([('jid', pymongo.ASCENDING)], unique=True)
+      self.groups.ensure_index([('jid', pymongo.TEXT)], unique=True)
       self.groups.ensure_index([('latlng', pymongo.GEO2D)])
 
     except:
@@ -67,17 +67,25 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         source = head['from'].split("@")[0]
         group = args['group_jid']
         
-        if not self.sources.has_key(source):
-          self.sources[source] = {}
-        self.sources[source]['latlng'] = None
-        self.sources[source]['hashtags'] = args['hashtags']
-        self.sources[source]['group'] = args['group_jid']
+        data = {
+          'hashtags': args['hashtags'],
+          'group': group
+        }
+
+        if self.sources.find_one({'jid':source}) is None:
+          data['jid'] = source
+          self.sources.insert(data)
+        else:
+          self.sources.update({'jid':source}, {'$set':data})
+
         print source , " initiated"
-      
-        if not self.groups.has_key(group):
-          self.groups[group] = {}
-        self.groups[group]['members'] = []
-        self.groups[group]['members'].append(source)
+     
+        if self.groups.find_one({'group_jid':group}) is None:
+          print "TRYING TO CREATE GROUP " + group + " AND SOURCE " + source
+          self.groups.insert({'group_jid':group, 'members':[source]})
+        else:
+          self.groups.update({'group_jid':group}, {'$addToSet':{'members':source}}) # $push/$addToSet
+
         print group , " created"
     except:
       print sys.exc_info()
