@@ -3,7 +3,7 @@ import json, pymongo, sleekxmpp
 
 class MapperXMPP(sleekxmpp.ClientXMPP):
 
-  def __init__(self, jid, password):
+  def __init__(self, jid, password, mongo_uri):
     sleekxmpp.ClientXMPP.__init__(self, jid, password)
     self.register_plugin('xep_0004') # Data forms
     self.register_plugin('xep_0030') # Service discovery
@@ -14,12 +14,22 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
 
-    self.sources = {}
-    self.groups = {}
+    self.local_sources = {}
+    self.local_groups = {}
 
     try:
-      self.mongo = pymongo.MongoClient('localhost', 27017)
+      self.mongo = pymongo.MongoClient(mongo_uri)
       self.db = mongo['lprm']
+
+      self.sources = self.db['sources']
+      # if len(self.sources.index_information()) == 0:
+      #   self.sources.create_index([('jid', pymongo.TEXT), ('latlng', pymongo.GEO2D)])
+      self.sources.ensure_index([('jid', pymongo.ASCENDING)], unique=True)
+      self.sources.ensure_index([('latlng', pymongo.GEO2D)])
+
+      self.groups = self.db['groups']
+      self.groups.ensure_index([('jid', pymongo.ASCENDING)], unique=True)
+      self.groups.ensure_index([('latlng', pymongo.GEO2D)])
 
     except:
       print sys.exc_info()
@@ -129,8 +139,9 @@ def main(argv):
 
   jid = "comp-mapper@localhost"
   pwd = "123"
+  mongo_uri = "mongodb://localhost:27017/"
 
-  client = MapperXMPP(jid, pwd)
+  client = MapperXMPP(jid, pwd, mongo_uri)
   client.connect()
   client.process()
 
