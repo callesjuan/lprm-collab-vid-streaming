@@ -53,6 +53,13 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
   '''
   MESSAGES
   '''
+
+  '''
+  ROUTINES/TASKS
+  '''
+  def send_suggestions(self):
+    # cluster groups (group location, centroid, should be updated after its sources send update_location)
+    # if it finds clusters then checks which group is more crowded and ancient, the pivot/master, finally it suggests members from the remaining groups to join it
   
 '''
 CONSOLE
@@ -81,8 +88,10 @@ def main(argv):
 
   while True:
     try:
-      msg_in = raw_input("> ")
-      client.handle_func(msg_in)
+      # msg_in = raw_input("> ")
+      # client.handle_func(msg_in)
+      time.sleep(10)
+      
       pass
     except KeyboardInterrupt, EOFError, Exception:
       print sys.exc_info()

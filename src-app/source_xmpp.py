@@ -125,10 +125,22 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     logging.info("group_match")
     # find groups matching geolocation + hashtags
 
-  def update_context(self, head, args):
-    logging.info("update_context")
+  def update_location(self, latlng):
+    logging.info("update_location")
     # publish current geolocation + sensor data + battery level
-
+    
+    try:
+      msg = {
+        'func':'update_location',
+        'args': {
+          'latlng': latlng 
+        }
+      }
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      print "location sent"
+    except:
+      print sys.exc_info()
+      
   def update_hashtags(self):
     logging.info("update_hashtags")
     # publish hashtag update
@@ -178,7 +190,7 @@ def main(argv):
     
     for opt, arg in opts:
       if opt in ('-j', '--jid'):
-        jid = arg
+        jid = arg + "/lprm"
       if opt in ('-p', '--pwd'):
         pwd = arg
       if opt in ('-h', '--hts'):
