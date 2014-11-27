@@ -1,9 +1,9 @@
-import logging, signal, sys, time
-import json, sleekxmpp
+import datetime, dateutil.parser, logging, signal, sys, time
+import json, numpy as np, pymongo, sklearn.cluster as skc, sleekxmpp
 
 class CorrelatorXMPP(sleekxmpp.ClientXMPP):
 
-  def __init__(self, jid, password):
+  def __init__(self, jid, password, mongo_uri):
     sleekxmpp.ClientXMPP.__init__(self, jid, password)
     self.register_plugin('xep_0004') # Data forms
     self.register_plugin('xep_0030') # Service discovery
@@ -14,8 +14,15 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
 
-    self.sources = {}
-    self.groups = {}
+    self.local_sources = {}
+    self.local_groups = {}
+
+    try:
+      self.mongo = pymongo.MongoClient(mongo_uri)
+      self.db = self.mongo['lprm']
+    except:
+      print sys.exc_info()
+      sys.exit(0)
 
   def handle_start(self, event):
     logging.info("connected")
@@ -43,7 +50,7 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
     func = getattr(self, arr_func[0])
     if len(arr_func) == 1:
       func()
-    else
+    else:
       func(arr_func[1])
 
   '''
@@ -58,9 +65,75 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
   ROUTINES/TASKS
   '''
   def send_suggestions(self):
+    # calculate group centroids
+    '''
+    groups = self.db['groups'].find()
+    for group in groups:
+      print group['group_jid']
+      members = self.db['sources'].find({'group':group['group_jid']})
+      sum_lng = 0
+      sum_lat = 0
+      count = len(group['members'])
+      print "count " + str(count) + " " + str(members.count())
+      for member in members:
+        print member['latlng']
+        latlng = member['latlng']
+        sum_lng += latlng[0]
+        sum_lat += latlng[1]
+      centroid_lng = sum_lng/count
+      centroid_lat = sum_lat/count
+      group_latlng = str(centroid_lat) + "," + str(centroid_lng)
+      self.db['groups'].update({'group_jid':group['group_jid']}, {'$set' : {'latlng' : group_latlng}})
+    '''
+
     # cluster groups (group location, centroid, should be updated after its sources send update_location)
     # if it finds clusters then checks which group is more crowded and ancient, the pivot/master, finally it suggests members from the remaining groups to join it
-  
+    groups_iter = self.db['groups'].find()
+    groups_arr = []
+    X_arr = []
+    
+    print 'clustering with ' + str(groups_iter.count()) + ' groups'
+
+    i = 0
+    for group in groups_iter:
+      latlng = group['latlng']
+      groups_arr.append(group)
+      new_row = [i, float(latlng[0]), float(latlng[1])]
+      X_arr.append(new_row)
+      # print new_row
+      i += 1 
+
+    X = np.array(X_arr)
+    EPS = 2
+    dbs = skc.DBSCAN(eps=2, min_samples=1).fit(X[:,1:])
+    
+    labels = dbs.labels_
+    # print labels
+
+    super_groups = {}
+    
+    for i in range(0, len(labels)):
+      sg_key = str(labels[i])
+      if not super_groups.has_key(sg_key):
+        super_groups[sg_key] = {}
+        super_groups[sg_key]['members'] = []
+        super_groups[sg_key]['pivot'] = i
+      else:
+        stamp_pivot = dateutil.parser.parse(groups_arr[super_groups[sg_key]['pivot']]['stamp'])
+        stamp_curr = dateutil.parser.parse(groups_arr[i]['stamp'])
+        if stamp_curr < stamp_pivot:
+          super_groups[sg_key]['pivot'] = i
+      super_groups[sg_key]['members'].append(X_arr[i])
+    
+    # print super_groups
+
+    for k,sg in super_groups.items():
+      for i in range(0, len(sg['members'])):
+        g = sg['members'][i][0]
+        if sg['pivot'] != g:
+          print "suggest sources at [" + groups_arr[g]['group_jid'] + "] to join [" + groups_arr[sg['pivot']]['group_jid'] + "]"
+      
+
 '''
 CONSOLE
 '''
@@ -81,8 +154,9 @@ def main(argv):
 
   jid = "comp-correlator@localhost"
   pwd = "123"
+  mongo_uri = "mongodb://localhost:27017"
 
-  client = CorrelatorXMPP(jid, pwd)
+  client = CorrelatorXMPP(jid, pwd, mongo_uri)
   client.connect()
   client.process()
 
@@ -91,9 +165,11 @@ def main(argv):
       # msg_in = raw_input("> ")
       # client.handle_func(msg_in)
       time.sleep(10)
+      print "firing correlator"
+      client.send_suggestions()
       
       pass
-    except KeyboardInterrupt, EOFError, Exception:
+    except Exception:
       print sys.exc_info()
       client.disconnect(wait=True)
       break

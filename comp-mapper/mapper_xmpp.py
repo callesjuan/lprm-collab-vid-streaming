@@ -1,5 +1,5 @@
 import datetime, logging, signal, sys, time
-import json, pymongo, sleekxmpp
+import json, matplotlib.pyplot as plt, pymongo, sleekxmpp
 
 class MapperXMPP(sleekxmpp.ClientXMPP):
 
@@ -43,7 +43,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
   def handle_message(self, message):
     logging.info(message)
-    print message
+    # print message
     delay = message["delay"].get_stamp()
     if delay is None: # process only if it isn't an offline message
       try:
@@ -124,20 +124,41 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     logging.info("update_location")
     # publish current geolocation + sensor data + battery level
 
-    print "location is about to be updated"
-    jid = head['from']
-    latlng = args['latlng'].split(',')
-    lat = int(latlng[0])
-    lng = int(latlng[1])
-   
-    data = {
-      'latlng': [lng, lat]
-    }
-    self.sources.update({'jid':jid}, {'$set': data})
-    print "location updated"
+    try:
+      jid = head['from']
+      latlng = args['latlng'].split(',')
+      lat = float(latlng[0])
+      lng = float(latlng[1])
+      
+      data = {
+        'latlng': [lng, lat]
+      }
+      self.sources.update({'jid':jid}, {'$set': data})
+      print "location updated"
+    except:
+      print sys.exc_info()
 
     # calculate centroids
-    sources = self.sources.find({'group_jid':
+    try:
+      group = self.groups.find_one({'members' : {'$in' : [jid]}})
+      # src = self.sources.find_one({'jid':jid})
+      # group = self.groups.find_one({'group_jid':src['group']})
+      members = self.sources.find({'group' : group['group_jid']})
+  
+      sum_lat = 0
+      sum_lng = 0
+      for member in members:
+        latlng = member['latlng']
+        sum_lat += latlng[1]
+        sum_lng += latlng[0]
+      
+      lat = sum_lat/members.count()
+      lng = sum_lng/members.count()
+      self.groups.update({'group_jid':group['group_jid']}, {'$set' : {'latlng' : [lng, lat]}})
+      print "centroid calculated"
+
+    except:
+      print sys.exc_info()
 
   def hnd_update_hashtags(self, head, args):
     logging.info("update_hashtags")
@@ -173,7 +194,27 @@ def main(argv):
   client.connect()
   client.process()
 
+  fig = plt.figure()
+  plt.ion()
+  plt.show()
+
   while True:
+    time.sleep(5)
+    
+    plot_x = []
+    plot_y = []
+
+    sources = client.sources.find()
+    for source in sources:
+      if source.has_key('latlng'):
+        latlng = source['latlng']
+        plot_x.append(latlng[0])
+        plot_y.append(latlng[1])
+
+    plt.clf()
+    plt.axis([-20,20,-20,20])
+    plt.plot(plot_x, plot_y, 'ro')
+    plt.draw()
     pass
 
 if __name__ == '__main__':
