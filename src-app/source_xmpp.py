@@ -27,6 +27,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.hashtags = None
     self.latlng = None
 
+    self.group_jid = None
+
   def handle_start(self, event):
     logging.info("connected")
     print "connected"
@@ -34,17 +36,19 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.send_presence(pstatus="")
 
   def handle_message(self, message):
-    print message
+    logging.info(message)
+    # print message
     delay = message["delay"].get_stamp()
     if delay is None: # process only if it isn't an offline message
       try:
         jbody = json.loads(message["body"])
         func = getattr(self, "hnd_" + jbody["func"]) # gets reference for the application function
         args = jbody["args"] # application arguments
-        head = {'from':message["from"], 'to':message["to"]} # header arguments
+        head = {'from':str(message["from"]), 'to':str(message["to"])} # header arguments
         func(head, args)
       except:
         logging.warning("message error")
+        print sys.exc_info()
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
 
   def handle_func(self, str_func):
@@ -72,6 +76,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   '''
   LISTENERS
   '''
+  def hnd_group_match_reply(self, head, args):
+    print head
+    print args
 
   '''
   MESSAGES
@@ -83,16 +90,16 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       # group_jid = self.hashtags.replace("#", "") + self.nick.replace("-", "") + "@" + self.MUC_JID
       if group_jid is None:
-        group_jid = self.hashtags + ";" + self.nick + "@" + self.MUC_JID
+        self.group_jid = self.hashtags + ";" + self.nick + "@" + self.MUC_JID
 
       msg = {
         'func':'stream_init',
         'args': {
-          'group_jid': group_jid,
+          'group_jid': self.group_jid,
           'hashtags' : self.hashtags # self.hashtags.replace("#",";")
         }
       }
-      pto_jid = str(group_jid+"/"+self.nick)
+      pto_jid = str(self.group_jid+"/"+self.nick)
       self.make_presence(pto=pto_jid).send()
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "stream_initiated"
@@ -121,9 +128,21 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     logging.info("group_leave")
     # leave current group and create group
 
-  def group_match(self, head, args):
+  def group_match(self):
     logging.info("group_match")
     # find groups matching geolocation + hashtags
+
+    try:
+      msg = {
+        'func':'group_match',
+        'args': {
+          'hashtags': self.hashtags,
+          'latlng': self.latlng
+        }
+      }
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      print sys.exc_info()
 
   def update_location(self, latlng):
     logging.info("update_location")
@@ -218,7 +237,7 @@ def main(argv):
     
   except Exception as e:
     logging.error("error")
-    sys.exc_info()
+    print sys.exc_info()
     sys.exit(0)
 
 if __name__ == '__main__':

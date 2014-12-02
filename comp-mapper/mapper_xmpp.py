@@ -68,9 +68,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         # source = head['from'].split("@")[0]
         source = head['from']
         group = args['group_jid']
+        hashtags = args['hashtags']
         
         data = {
-          'hashtags': args['hashtags'],
+          'hashtags': hashtags,
           'group': group
         }
 
@@ -87,7 +88,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
      
         if self.groups.find_one({'group_jid':group}) is None:
           print "TRYING TO CREATE GROUP " + group + " AND SOURCE " + source
-          self.groups.insert({'group_jid':group, 'members':[source], 'stamp':stamp})
+          self.groups.insert({'group_jid':group, 'members':[source], 'stamp':stamp, 'hashtags':hashtags})
         else:
           self.groups.update({'group_jid':group}, {'$addToSet':{'members':source}}) # $push/$addToSet
 
@@ -119,6 +120,35 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   def hnd_group_match(self, head, args):
     logging.info("group_match")
     # find groups matching geolocation + hashtags
+    
+    try:
+      source = head['from']
+      latlng = args['latlng'].split(',')
+      lat = int(latlng[0])
+      lng = int(latlng[1])
+      hashtags = args['hashtags']
+      print source + " - " + str(latlng) + " - " + hashtags
+
+      # match latlng
+      match = self.groups.find({'latlng': {'$near': [lng, lat]}})
+      groups = []
+      for g in match:
+        groups.append(g)
+
+      # match hashtags
+
+      msg = {
+        'func':'group_match_reply',
+        'args': {
+          'count': match.count(),
+          'groups': groups
+        }
+      }
+
+      self.make_message(mto=source, mbody=json.dumps(msg)).send()
+    except:
+      print sys.exc_info()
+
 
   def hnd_update_location(self, head, args):
     logging.info("update_location")
