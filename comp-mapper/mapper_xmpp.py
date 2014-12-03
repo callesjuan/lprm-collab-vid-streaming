@@ -13,6 +13,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.register_plugin('xep_0203') # Delayed delivery
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
+    self.add_event_handler('got_online', self.got_online)
+    self.add_event_handler('got_offline', self.got_offline)
 
     self.local_sources = {}
     self.local_groups = {}
@@ -43,7 +45,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
   def handle_message(self, message):
     logging.info(message)
-    # print message
+    print message
     delay = message["delay"].get_stamp()
     if delay is None: # process only if it isn't an offline message
       try:
@@ -56,6 +58,14 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         logging.warning("message error")
         print sys.exc_info()
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
+
+  def got_online(self, presence):
+    print 'online'
+    print presence
+
+  def got_offline(self, presence):
+    print 'offline'
+    print presence
 
   '''
   LISTENERS 
@@ -81,6 +91,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           data['jid'] = source
           data['stamp'] = stamp
           self.sources.insert(data)
+          self.makePresence(pto=source, ptype='subscribe').send()
         else:
           self.sources.update({'jid':source}, {'$set':data})
 
@@ -131,9 +142,16 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
       # match latlng
       match = self.groups.find({'latlng': {'$near': [lng, lat]}})
+      print match.count()
       groups = []
       for g in match:
-        groups.append(g)
+        d = {
+          'group_jid': g['group_jid'],
+          'hashtags': g['hashtags']
+        }
+        groups.append(d)
+      
+      print groups
 
       # match hashtags
 

@@ -19,6 +19,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.register_plugin('xep_0203') # Delayed delivery
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
+    self.auto_authorize = True
 
     self.jid = jid
     self.nick = jid.split("@")[0]
