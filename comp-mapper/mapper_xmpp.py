@@ -1,4 +1,4 @@
-import datetime, logging, signal, sys, threading, time
+import datetime, dateutil.parser, logging, signal, sys, threading, time
 import bson.son as son, json, matplotlib.pyplot as plt, pymongo, sleekxmpp
 
 class MapperXMPP(sleekxmpp.ClientXMPP):
@@ -74,8 +74,18 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.sources.update({'jid':presence['from']}, {'$set':{'state':'off'}})
 
   def check_status(self, jid):
-    print 'timer'
-    print jid
+    # print 'timer'
+    # print jid
+    source = self.sources.find_one({'jid': jid})
+
+    now = datetime.datetime.now()
+    update = dateutil.parser.parse(source['update_stamp'])
+
+    time_lapsed = now - update
+    # seconds_lapsed = time_lapsed.days * 24 * 60 * 60 + time_lapsed.seconds
+    if time_lapsed.seconds > 60 and time_lapsed.days != 0:
+      self.sources.update({'jid': jid}, {'$set':{'state':'off'}})
+    
 
   '''
   LISTENERS 
@@ -95,12 +105,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         data = {
           'hashtags': hashtags,
           'group': group,
-          'update': stamp
+          'update_stamp': stamp
         }
 
         if self.sources.find_one({'jid':source}) is None:
           data['jid'] = source
-          data['insert'] = stamp
+          data['insert_stamp'] = stamp
           data['state'] = 'on'
           self.sources.insert(data)
           self.make_presence(pto=source, ptype='subscribe').send()
@@ -111,7 +121,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
      
         if self.groups.find_one({'group_jid':group}) is None:
           print "TRYING TO CREATE GROUP " + group + " AND SOURCE " + source
-          self.groups.insert({'group_jid':group, 'members':[source], 'banned':[], 'stamp':stamp, 'hashtags':hashtags})
+          self.groups.insert({'group_jid':group, 'members':[source], 'banned':[], 'insert_stamp':stamp, 'hashtags':hashtags})
         else:
           self.groups.update({'group_jid':group}, {'$addToSet':{'members':source}}) # $push/$addToSet
 
@@ -202,7 +212,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
       data = {
         'latlng': [lng, lat],
-        'update': stamp
+        'update_stamp': stamp
       }
       self.sources.update({'jid':jid}, {'$set': data})
       print "location updated"
@@ -275,7 +285,7 @@ def main(argv):
     plot_x = []
     plot_y = []
 
-    sources = client.sources.find()
+    sources = client.sources.find({'status':'on'})
     for source in sources:
       if source.has_key('latlng'):
         latlng = source['latlng']
