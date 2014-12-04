@@ -1,4 +1,4 @@
-import getopt, logging, signal, sys, time
+import datetime, getopt, logging, signal, sys, time
 import json, sleekxmpp
 
 class SourceXMPP(sleekxmpp.ClientXMPP):
@@ -6,7 +6,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   '''
   CONSTANTS
   '''
-  MAPPER_JID = 'comp-mapper@localhost'
+  MAPPER_JID = 'comp-mapper@localhost/console'
   MUC_JID = 'conference.localhost'
 
   def __init__(self, jid, pwd):
@@ -91,7 +91,11 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       # group_jid = self.hashtags.replace("#", "") + self.nick.replace("-", "") + "@" + self.MUC_JID
       if group_jid is None:
-        self.group_jid = self.hashtags + ";" + self.nick + "@" + self.MUC_JID
+        now = datetime.datetime.now()
+        stamp = now.strftime('%Y%m%d%H%M%S')
+        self.group_jid = self.hashtags + ";" + self.nick + ";" + stamp + "@" + self.MUC_JID
+      else:
+        self.group_jid = group_jid
 
       msg = {
         'func':'stream_init',

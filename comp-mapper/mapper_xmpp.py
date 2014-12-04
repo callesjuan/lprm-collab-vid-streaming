@@ -1,5 +1,5 @@
-import datetime, logging, signal, sys, time
-import json, matplotlib.pyplot as plt, pymongo, sleekxmpp
+import datetime, logging, signal, sys, threading, time
+import bson.son as son, json, matplotlib.pyplot as plt, pymongo, sleekxmpp
 
 class MapperXMPP(sleekxmpp.ClientXMPP):
 
@@ -19,6 +19,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.local_sources = {}
     self.local_groups = {}
 
+    self.delta_check_status = 10.0
+    self.timer_check_status = {}
+    
     try:
       self.mongo = pymongo.MongoClient(mongo_uri)
       self.db = self.mongo['lprm']
@@ -45,7 +48,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
   def handle_message(self, message):
     logging.info(message)
-    print message
+    # print message
     delay = message["delay"].get_stamp()
     if delay is None: # process only if it isn't an offline message
       try:
@@ -60,12 +63,19 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
 
   def got_online(self, presence):
-    print 'online'
-    print presence
+    # print 'online' 
+    # print presence['from']
+    self.sources.update({'jid':presence['from']}, {'$set':{'state':'on'}})
+    
 
   def got_offline(self, presence):
-    print 'offline'
-    print presence
+    # print 'offline'
+    # print presence['from']
+    self.sources.update({'jid':presence['from']}, {'$set':{'state':'off'}})
+
+  def check_status(self, jid):
+    print 'timer'
+    print jid
 
   '''
   LISTENERS 
@@ -80,18 +90,20 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         group = args['group_jid']
         hashtags = args['hashtags']
         
+        stamp = datetime.datetime.now().isoformat()
+
         data = {
           'hashtags': hashtags,
-          'group': group
+          'group': group,
+          'update': stamp
         }
-
-        stamp = datetime.datetime.now().isoformat()
 
         if self.sources.find_one({'jid':source}) is None:
           data['jid'] = source
-          data['stamp'] = stamp
+          data['insert'] = stamp
+          data['state'] = 'on'
           self.sources.insert(data)
-          self.makePresence(pto=source, ptype='subscribe').send()
+          self.make_presence(pto=source, ptype='subscribe').send()
         else:
           self.sources.update({'jid':source}, {'$set':data})
 
@@ -99,11 +111,19 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
      
         if self.groups.find_one({'group_jid':group}) is None:
           print "TRYING TO CREATE GROUP " + group + " AND SOURCE " + source
-          self.groups.insert({'group_jid':group, 'members':[source], 'stamp':stamp, 'hashtags':hashtags})
+          self.groups.insert({'group_jid':group, 'members':[source], 'banned':[], 'stamp':stamp, 'hashtags':hashtags})
         else:
           self.groups.update({'group_jid':group}, {'$addToSet':{'members':source}}) # $push/$addToSet
 
         print group , " created"
+
+        if self.timer_check_status.has_key(source):
+          self.timer_check_status[source].cancel()
+
+        self.timer_check_status[source] = threading.Timer(self.delta_check_status, self.check_status, [source], {})
+        self.timer_check_status[source].start()
+        
+        print 'timer set'
     except:
       print sys.exc_info()
 
@@ -138,11 +158,11 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       lat = int(latlng[0])
       lng = int(latlng[1])
       hashtags = args['hashtags']
-      print source + " - " + str(latlng) + " - " + hashtags
+      # print source + " - " + str(latlng) + " - " + hashtags
 
       # match latlng
-      match = self.groups.find({'latlng': {'$near': [lng, lat]}})
-      print match.count()
+      match = self.groups.find( {'latlng': son.SON([('$near', [lng, lat]), ('$maxDistance', 2)]) })
+      # print match.count()
       groups = []
       for g in match:
         d = {
@@ -151,7 +171,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         }
         groups.append(d)
       
-      print groups
+      # print groups
 
       # match hashtags
 
@@ -168,8 +188,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       print sys.exc_info()
 
 
-  def hnd_update_location(self, head, args):
-    logging.info("update_location")
+  def hnd_update_latlng(self, head, args):
+    logging.info("update_latlng")
     # publish current geolocation + sensor data + battery level
 
     try:
@@ -178,8 +198,11 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       lat = float(latlng[0])
       lng = float(latlng[1])
       
+      stamp = datetime.datetime.now().isoformat()
+
       data = {
-        'latlng': [lng, lat]
+        'latlng': [lng, lat],
+        'update': stamp
       }
       self.sources.update({'jid':jid}, {'$set': data})
       print "location updated"
@@ -234,7 +257,7 @@ def main(argv):
   
   global client
 
-  jid = "comp-mapper@localhost"
+  jid = "comp-mapper@localhost/console"
   pwd = "123"
   mongo_uri = "mongodb://localhost:27017/"
 
