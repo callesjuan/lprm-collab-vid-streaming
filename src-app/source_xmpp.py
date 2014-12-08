@@ -22,13 +22,21 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.auto_authorize = True
 
     self.jid = jid
-    self.nick = jid.split("@")[0]
     self.pwd = pwd
-
-    self.hashtags = None
-    self.latlng = None
-
-    self.group_jid = None
+    self.twitter_id = None
+    self.twitcasting_id = None
+    self.livestream_id = None
+    self.ustream_id = None
+    
+    self.muc_nick = jid.split("@")[0]
+    
+    self.current_stream.stream_id = None
+    self.current_stream.group_jid = None
+    self.current_stream.status = None
+    self.current_stream.current_latlng = None
+    self.current_stream.current_hashtags = None
+    self.current_stream.current_stamp = None
+    self.current_stream.current_media = None
 
   def handle_start(self, event):
     logging.info("connected")
@@ -45,8 +53,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         jbody = json.loads(message["body"])
         func = getattr(self, "hnd_" + jbody["func"]) # gets reference for the application function
         args = jbody["args"] # application arguments
-        head = {'from':str(message["from"]), 'to':str(message["to"])} # header arguments
-        func(head, args)
+        args['from'] = str(message['from'])
+        args['to'] = str(message['to'])
+        func(args)
       except:
         logging.warning("message error")
         print sys.exc_info()
@@ -75,15 +84,26 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print self.latlng
 
   '''
-  LISTENERS
+  REPLIES
   '''
-  def hnd_group_match_reply(self, head, args):
-    print head
-    print args
+  def hnd_bad_message_reply(self, args):
+    print 'bad message reply'
+    
+  def hnd_stream_status_reply(self, args):
+    print 'stream status reply'
+  
+  def hnd_group_match_reply(self, args):
+    print 'group match reply'
 
   '''
   MESSAGES
   '''
+  def stream_status(self):
+    msg = {
+      'jid': self.jid
+    }
+    self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+  
   def stream_init(self, group_jid=None):
     logging.info("stream_init")
     print "initiating stream"

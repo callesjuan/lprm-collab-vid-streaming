@@ -1,0 +1,42 @@
+sources
+  jid
+  pwd
+  twitter_id
+  twitcasting_id
+  livestream_id
+  ustream_id
+  bambuser_id
+  streams
+  current_stream
+  
+streams
+  stream_id
+  jid
+  group_jid
+  status (on, on+, on-, off, fini)
+  current_latlng
+  current_hashtags
+  current_stamp
+  current_media
+  init_stamp
+  fini_stamp
+  
+groups
+  group_jid
+  status (init, fini)
+  current_centroid
+  current_hashtags
+  current_stamp
+  init_stamp
+  fini_stamp
+  members
+
+updates
+  stream_id
+  jid
+  group_jid
+  latlng
+  hashtags
+  stamp
+  media
+  summary
