@@ -46,7 +46,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     print "connected"
     self.get_roster()
     self.send_presence(pstatus="")
-
+  
   def handle_message(self, message):
     logging.info(message)
     # print message
@@ -62,67 +62,80 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       except:
         logging.warning("message error")
         print sys.exc_info()
-    # self.make_message(mto=message["from"], mbody=message["body"]).send()
+
+  ##################################################
 
   def got_online(self, presence):
-    # print 'online' 
-    # print presence['from']
     self.streams.update({'jid':presence['from']}, {'$set':{'status':'on'}})
 
+  ##################################################
+
   def got_offline(self, presence):
-    # print 'offline'
-    # print presence['from']
     self.streams.update({'jid':presence['from']}, {'$set':{'status':'off'}})
 
+  ##################################################
+
   def check_latlng_update(self, stream_id):
-    # print 'timer'
-    # print jid
-    stream = self.streams.find_one({'stream_id': jid, 'status'})
+    try:
+      stream = self.streams.find_one({'stream_id': jid, 'status'})
 
-    now = datetime.datetime.now()
-    update = dateutil.parser.parse(stream['current_stamp'])
+      now = datetime.datetime.now()
+      update = dateutil.parser.parse(stream['current_stamp'])
 
-    time_lapsed = now - update
-    # seconds_lapsed = time_lapsed.days * 24 * 60 * 60 + time_lapsed.seconds
-    if time_lapsed.seconds > 60 and time_lapsed.days != 0:
-      self.streams.update({'jid': jid}, {'$set':{'state':'off'}})
+      time_lapsed = now - update
+      # seconds_lapsed = time_lapsed.days * 24 * 60 * 60 + time_lapsed.seconds
+      if time_lapsed.seconds > 60 or time_lapsed.days != 0:
+        self.streams.update({'jid': jid}, {'$set':{'state':'off'}})
+    except:
+      print sys.exc_info()
 
+  ##################################################
+  ##################################################
+  ##################################################
   '''
   LISTENERS 
   '''
+  ##################################################  
+  ##################################################  
+  ##################################################
   
   def hnd_stream_status(self, args):
-    source = self.sources.find_one({'jid':args['jid']})
-    stream_id = source['current_stream']
-    
-    msg = {
-        'func':'stream_status_reply',
-        'args': {}
-      }
+    logging.info("stream_status")
+    try:
+      source = self.sources.find_one({'jid':args['jid']})
+      stream_id = source['current_stream']
+      
+      msg = {
+          'func':'stream_status_reply',
+          'args': {}
+        }
 
-    if stream_id is not None:
-      stream = self.streams.find_one({'stream_id': stream_id})
-      msg['args']['stream'] = stream
-    else:
-      msg['args']['stream'] = None
- 
-    self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+      if stream_id is not None:
+        stream = self.streams.find_one({'stream_id': stream_id})
+        msg['args']['stream'] = stream
+      else:
+        msg['args']['stream'] = None
+   
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+    except:
+      print sys.exc_info()
+  
+  ##################################################
  
   def hnd_stream_init(self, args):
     logging.info("stream_init")
     try:
       if args["group_jid"] is not None:
-        # source = head['from'].split("@")[0]
         source = args['from']
-        group = args['group_jid']
+        group_jid = args['group_jid']
         hashtags = args['hashtags']
         
         stamp = datetime.datetime.now().isoformat()
 
         data = {
+          'group_jid': group_jid,
           'hashtags': hashtags,
-          'group': group,
-          'update_stamp': stamp
+          'current_stamp': stamp
         }
 
         if self.streams.find_one({'jid':source}) is None:
@@ -152,28 +165,44 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         
         print 'timer set'
     except:
+      logging.error("stream_init error")
+      logging.error(sys.exc_info())
       print sys.exc_info()
+
+  ##################################################
 
   def hnd_stream_pause(self, args):
     logging.info("stream_pause")
 
+  ##################################################
+
   def hnd_stream_resume(self, args):
     logging.info("stream_resume")
+
+  ##################################################
 
   def hnd_stream_close(self, args):
     logging.info("stream_close")
     # leave current group
 
+  ##################################################
+
   def hnd_stream_exists(self, args):
     logging.info("stream_exists")
+
+  ##################################################
 
   def hnd_group_join(self, args):
     logging.info("group_join")
     # leave current group and join selected/existing group
 
+  ##################################################
+
   def hnd_group_leave(self, args):
     logging.info("group_leave")
     # leave current group and create group
+
+  ##################################################
 
   def hnd_group_match(self, args):
     logging.info("group_match")
@@ -185,7 +214,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       lat = int(latlng[0])
       lng = int(latlng[1])
       hashtags = args['hashtags']
-      # print source + " - " + str(latlng) + " - " + hashtags
 
       # match latlng
       match = self.groups.find( {'latlng': son.SON([('$near', [lng, lat]), ('$maxDistance', 2)]) })
@@ -201,7 +229,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       # print groups
 
       # match hashtags
-
       msg = {
         'func':'group_match_reply',
         'args': {
@@ -214,12 +241,13 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     except:
       print sys.exc_info()
 
+  ##################################################
 
   def hnd_update_latlng(self, args):
     logging.info("update_latlng")
-    # publish current geolocation + sensor data + battery level
 
     try:
+      # publish current geolocation + sensor data + battery level
       jid = args['from']
       latlng = args['latlng'].split(',')
       lat = float(latlng[0])
@@ -233,11 +261,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       }
       self.streams.update({'jid':jid}, {'$set': data})
       print "location updated"
-    except:
-      print sys.exc_info()
 
-    # calculate centroids
-    try:
+      # calculate centroids
       group = self.groups.find_one({'members' : {'$in' : [jid]}})
       # src = self.streams.find_one({'jid':jid})
       # group = self.groups.find_one({'group_jid':src['group']})
@@ -257,15 +282,23 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
     except:
       print sys.exc_info()
+      
+  ##################################################
 
   def hnd_update_hashtags(self, args):
     logging.info("update_hashtags")
     # publish hashtag update
 
+  ##################################################
+  ##################################################
+  ##################################################
   '''
   MESSAGES
   '''
-  
+  ##################################################
+  ##################################################
+  ##################################################
+    
 '''
 CONSOLE
 '''

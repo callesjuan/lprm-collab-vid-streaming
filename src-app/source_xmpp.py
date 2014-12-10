@@ -29,7 +29,11 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.ustream_id = None
     
     self.muc_nick = jid.split("@")[0]
+
+    self.current_stream = None
+    self.stream_status_required = True
     
+    '''
     self.current_stream.stream_id = None
     self.current_stream.group_jid = None
     self.current_stream.status = None
@@ -37,6 +41,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.current_stream.current_hashtags = None
     self.current_stream.current_stamp = None
     self.current_stream.current_media = None
+    '''
 
   def handle_start(self, event):
     logging.info("connected")
@@ -57,7 +62,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         args['to'] = str(message['to'])
         func(args)
       except:
-        logging.warning("message error")
+        logging.error("message error")
+        logging.error(sys.exc_info)
         print sys.exc_info()
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
 
@@ -83,37 +89,72 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   def print_latlng(self):
     print self.latlng
 
+  ##################################################
+  ##################################################
+  ##################################################
   '''
   REPLIES
   '''
+  ##################################################
+  ##################################################
+  ##################################################
+    
   def hnd_bad_message_reply(self, args):
     print 'bad message reply'
-    
+
+  ##################################################
+
   def hnd_stream_status_reply(self, args):
     print 'stream status reply'
-  
+    try:
+      self.current_stream = json.loads(args['stream'])
+      self.stream_status_required = False
+    except:
+      logging.error("stream_status_reply error")
+      logging.error(sys.exc_info())
+      print sys.exc_info()
+
+  ##################################################
+ 
   def hnd_group_match_reply(self, args):
     print 'group match reply'
 
+  ##################################################
+  ##################################################
+  ##################################################
   '''
   MESSAGES
   '''
+  ##################################################
+  ##################################################
+  ##################################################
+  
   def stream_status(self):
-    msg = {
-      'jid': self.jid
-    }
-    self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    try:
+      msg = {
+        'jid': self.jid
+      }
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      logging.error("stream_status error")
+      logging.error(sys.exc_info())
+      print sys.exc_info()
+  
+  ##################################################
   
   def stream_init(self, group_jid=None):
     logging.info("stream_init")
     print "initiating stream"
     
     try:
-      # group_jid = self.hashtags.replace("#", "") + self.nick.replace("-", "") + "@" + self.MUC_JID
+      if self.current_stream is not None or self.stream_status_required is True:
+        raise Exception('you already have an active or pending stream')
+    
       if group_jid is None:
         now = datetime.datetime.now()
         stamp = now.strftime('%Y%m%d%H%M%S')
-        self.group_jid = self.hashtags + ";" + self.nick + ";" + stamp + "@" + self.MUC_JID
+        # self.group_jid = self.hashtags + ";" + self.nick + ";" + stamp + "@" + self.MUC_JID
+        self.group_jid = self.nick + "_" + stamp + "@" + self.MUC_JID
       else:
         self.group_jid = group_jid
 
@@ -129,29 +170,44 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "stream_initiated"
     except:
+      logging.error("stream_init error")
+      logging.error(sys.exc_info())
       print sys.exc_info()
-      logging.error("error")
+
+  ##################################################
 
   def stream_pause(self, head, args):
     logging.info("stream_pause")
 
+  ##################################################
+
   def stream_resume(self, head, args):
     logging.info("stream_resume")
+
+  ##################################################
 
   def stream_close(self, head, args):
     logging.info("stream_close")
     # leave current group
 
+  ##################################################
+
   def stream_exists(self, head, args):
     logging.info("stream_exists")
+
+  ##################################################
 
   def group_join(self, head, args):
     logging.info("group_join")
     # leave current group and join selected/existing group
 
+  ##################################################
+
   def group_leave(self, head, args):
     logging.info("group_leave")
     # leave current group and create group
+
+  ##################################################
 
   def group_match(self):
     logging.info("group_match")
@@ -167,7 +223,11 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
+      logging.error("group_match error")
+      logging.error(sys.exc_info())
       print sys.exc_info()
+
+  ##################################################
 
   def update_location(self, latlng):
     logging.info("update_location")
@@ -184,7 +244,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       print "location sent"
     except:
       print sys.exc_info()
-      
+
+  ##################################################
+
   def update_hashtags(self):
     logging.info("update_hashtags")
     # publish hashtag update
@@ -193,6 +255,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       msg = {}
       self.make_message(mto=self.MAPPER_JID)
     except:
+      logging.error("update_hashtags error")
+      logging.error(sys.exc_info())
       print sys.exc_info()
 
 '''
