@@ -31,7 +31,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.muc_nick = jid.split("@")[0]
 
     self.current_stream = None
-    self.stream_status_required = True
+    self.stream_init_allow = False
     
     '''
     self.current_stream.stream_id = None
@@ -108,7 +108,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print 'stream status reply'
     try:
       self.current_stream = json.loads(args['stream'])
-      self.stream_status_required = False
+      if self.current_stream is None:
+        self.stream_init_allow = True
+      else:
+        self.stream_init_allow = False
     except:
       logging.error("stream_status_reply error")
       logging.error(sys.exc_info())
@@ -132,7 +135,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   def stream_status(self):
     try:
       msg = {
-        'jid': self.jid
+        'func': 'stream_status',
+        'args': {
+          'jid': self.jid
+        }
       }
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
@@ -147,7 +153,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print "initiating stream"
     
     try:
-      if self.current_stream is not None or self.stream_status_required is True:
+      if self.stream_init_allow == False:
         raise Exception('you already have an active or pending stream')
     
       if group_jid is None:
@@ -169,6 +175,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.make_presence(pto=pto_jid).send()
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "stream_initiated"
+      
+      self.stream_init_allow = False
     except:
       logging.error("stream_init error")
       logging.error(sys.exc_info())
