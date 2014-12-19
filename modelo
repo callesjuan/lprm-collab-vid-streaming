@@ -13,22 +13,23 @@ streams
   stream_id
   jid
   group_jid
-  status (on, on+, on-, off, fini)
+  status (on, on+, on-, off, end)
+  last_status (on, on+, on-)
   current_latlng
   current_hashtags
   current_stamp
   current_media
   init_stamp
-  fini_stamp
+  close_stamp
   
 groups
   group_jid
-  status (init, fini)
+  status (init, end)
   current_centroid
   current_hashtags
   current_stamp
   init_stamp
-  fini_stamp
+  close_stamp
   members
 
 updates

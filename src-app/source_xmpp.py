@@ -35,17 +35,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.current_latlng = None
     self.current_hashtags = None
     
-    self.stream_init_allow = False
-    
-    '''
-    self.current_stream.stream_id = None
-    self.current_stream.group_jid = None
-    self.current_stream.status = None
-    self.current_stream.current_latlng = None
-    self.current_stream.current_hashtags = None
-    self.current_stream.current_stamp = None
-    self.current_stream.current_media = None
-    '''
+    self.stream_status_required = True  # should change back to True whenever the stream is paused (including when the entire app is paused - sent to background)
 
   def handle_start(self, event):
     logging.info("connected")
@@ -112,15 +102,12 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print 'stream status reply'
     try:
       current_stream = json.loads(args['stream'])
-      if current_stream is None:
+      if current_stream is not None
         self.stream_id = current_stream['stream_id']
         self.group_jid = current_stream['group_jid']
         self.current_latlng = current_stream['current_latlng']
         self.current_hashtags = current_stream['current_hashtags']
-        
-        self.stream_init_allow = True
-      else:
-        self.stream_init_allow = False
+      self.stream_status_required = False
     except:
       logging.error("stream_status_reply error")
       logging.error(sys.exc_info())
@@ -162,8 +149,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print "initiating stream"
     
     try:
-      if self.stream_init_allow == False:
-        raise Exception('you already have an active or pending stream')
+      if self.stream_status_required == True:
+        raise Exception('stream_status message is required')
+      if self.stream_id is not None:
+        raise Exception('there is already an active or pending stream')
       
       now = datetime.datetime.now()
       stamp = now.strftime('%Y%m%d%H%M%S')
@@ -188,12 +177,6 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "stream_initiated"
       
-      self.current_stream = {
-        'group_jid' : group_jid,
-        'current_hashtags': self.hashtags
-      }
-      
-      self.stream_init_allow = False
     except:
       logging.error("stream_init error")
       logging.error(sys.exc_info())

@@ -19,8 +19,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.local_sources = {}
     self.local_groups = {}
 
-    self.delta_check_latlng_update = 10.0
-    self.timer_check_latlng_update = {}
+    self.delta_check_autoclose = 60 * 60 # 1 hour
+    self.timer_check_autoclose = {}
     
     try:
       self.mongo = pymongo.MongoClient(mongo_uri)
@@ -66,26 +66,48 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   ##################################################
 
   def got_online(self, presence):
-    self.streams.update({'jid':presence['from']}, {'$set':{'status':'on'}})
+    try:
+      jid = presence['from']
+      stream = self.streams.find_one({'jid':jid, 'status': {'$not':'end'}})
+      
+      if stream is not None:
+        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':stream['last_status']}})
+        
+      if self.timer_check_autoclose.has_key(jid):
+        self.timer_check_autoclose[jid].cancel()
+        self.timer_check_autoclose.pop(jid, None)
+    except:
+      print sys.exc_info()
 
   ##################################################
 
   def got_offline(self, presence):
-    self.streams.update({'jid':presence['from']}, {'$set':{'status':'off'}})
+    try:
+      jid = presence['from']
+      stream = self.streams.find_one({'jid':jid, 'status': {'$not':'end'}})
+    
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'off', 'last_status':stream['status']}})
+
+      if self.timer_check_autoclose.has_key(jid):
+        self.timer_check_autoclose[jid].cancel()
+
+      self.timer_check_autoclose[jid] = threading.Timer(self.delta_check_autoclose, self.check_autoclose, [jid], {})
+      self.timer_check_autoclose[jid].start()
+      
+      print 'timer set'
+    except:
+      print sys.exc_info()
 
   ##################################################
 
-  def check_latlng_update(self, stream_id):
+  def check_autoclose(self, stream_id):
     try:
-      stream = self.streams.find_one({'stream_id': jid, 'status'})
+      stream = self.streams.find_one({'jid': jid, 'status':'off'})
 
-      now = datetime.datetime.now()
-      update = dateutil.parser.parse(stream['current_stamp'])
-
-      time_lapsed = now - update
-      # seconds_lapsed = time_lapsed.days * 24 * 60 * 60 + time_lapsed.seconds
-      if time_lapsed.seconds > 60 or time_lapsed.days != 0:
-        self.streams.update({'jid': jid}, {'$set':{'state':'off'}})
+      if stream is not None:
+        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'end'}})
+        
+        print 'stream closed'
     except:
       print sys.exc_info()
 
@@ -161,14 +183,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           self.groups.update({'group_jid':group}, {'$addToSet':{'members':source}}) # $push/$addToSet
 
         print group , " created"
-
-        if self.timer_check_latlng_update.has_key(source):
-          self.timer_check_latlng_update[source].cancel()
-
-        self.timer_check_status[source] = threading.Timer(self.delta_check_status, self.check_status, [source], {})
-        self.timer_check_status[source].start()
         
-        print 'timer set'
     except:
       logging.error("stream_init error")
       logging.error(sys.exc_info())
