@@ -112,7 +112,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
       if stream_id is not None:
         stream = self.streams.find_one({'stream_id': stream_id})
-        msg['args']['stream'] = stream
+        msg['args']['stream'] = {
+          'stream_id': stream['stream_id']
+          'group_jid': stream['group_jid'],
+          'current_latlng': stream['current_latlng'],
+          'current_hashtags': stream['current_hashtags']
+        }
       else:
         msg['args']['stream'] = None
    

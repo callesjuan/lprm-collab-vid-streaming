@@ -30,7 +30,11 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     
     self.muc_nick = jid.split("@")[0]
 
-    self.current_stream = None
+    self.stream_id = None
+    self.group_jid = None
+    self.current_latlng = None
+    self.current_hashtags = None
+    
     self.stream_init_allow = False
     
     '''
@@ -107,8 +111,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   def hnd_stream_status_reply(self, args):
     print 'stream status reply'
     try:
-      self.current_stream = json.loads(args['stream'])
-      if self.current_stream is None:
+      current_stream = json.loads(args['stream'])
+      if current_stream is None:
+        self.stream_id = current_stream['stream_id']
+        self.group_jid = current_stream['group_jid']
+        self.current_latlng = current_stream['current_latlng']
+        self.current_hashtags = current_stream['current_hashtags']
+        
         self.stream_init_allow = True
       else:
         self.stream_init_allow = False
@@ -155,18 +164,21 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       if self.stream_init_allow == False:
         raise Exception('you already have an active or pending stream')
+      
+      now = datetime.datetime.now()
+      stamp = now.strftime('%Y%m%d%H%M%S')
+      self.stream_id = self.nick + "_" + stamp
     
       if group_jid is None:
-        now = datetime.datetime.now()
-        stamp = now.strftime('%Y%m%d%H%M%S')
         # self.group_jid = self.hashtags + ";" + self.nick + ";" + stamp + "@" + self.MUC_JID
-        self.group_jid = self.nick + "_" + stamp + "@" + self.MUC_JID
+        self.group_jid = self.stream_id + "@" + self.MUC_JID
       else:
         self.group_jid = group_jid
 
       msg = {
         'func':'stream_init',
         'args': {
+          'stream_id': self.stream_id,
           'group_jid': self.group_jid,
           'hashtags' : self.hashtags # self.hashtags.replace("#",";")
         }
@@ -175,6 +187,11 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.make_presence(pto=pto_jid).send()
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "stream_initiated"
+      
+      self.current_stream = {
+        'group_jid' : group_jid,
+        'current_hashtags': self.hashtags
+      }
       
       self.stream_init_allow = False
     except:
