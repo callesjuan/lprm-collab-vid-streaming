@@ -184,36 +184,110 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
 
   ##################################################
 
-  def stream_pause(self, head, args):
+  def stream_pause(self):
     logging.info("stream_pause")
+    
+    try:
+      if self.stream_id is None:
+        raise Exception('there is no active stream')
+    
+      msg = {
+        'func':'stream_pause',
+        'args': {
+          'stream_id':self.stream_id
+        }
+      }
+      
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      self.stream_status_required = True
+    except:
+      print sys.exc_info()
 
   ##################################################
 
-  def stream_resume(self, head, args):
+  def stream_resume(self):
     logging.info("stream_resume")
+    
+    try:
+      if self.stream_status_required == True:
+        raise Exception('stream_status message is required')
+      if self.stream_id is None:
+        raise Exception('there is no pending stream')
+      
+      msg = {
+        'func':'stream_resume',
+        'args': {
+          'stream_id':self.stream_id
+        }
+      }
+      
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      print sys.exc_info()
 
   ##################################################
 
-  def stream_close(self, head, args):
+  def stream_close(self):
     logging.info("stream_close")
     # leave current group
-
+    
+    try:
+      if self.stream_id is None:
+        raise Exception('there is neither an active or pending stream')
+    
+      msg = {
+        'func':'stream_close',
+        'args': {
+          'stream_id':self.stream_id
+        }
+      }
+      
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      
+      self.stream_id = None
+      self.group_jid = None
+      self.current_latlng = None
+      self.current_hashtags = None
+      self.stream_status_required = True
+    except:
+      print sys.exc_info()
+      
   ##################################################
 
-  def stream_exists(self, head, args):
-    logging.info("stream_exists")
-
-  ##################################################
-
-  def group_join(self, head, args):
+  def group_join(self, group_id):
     logging.info("group_join")
     # leave current group and join selected/existing group
+    
+    try:
+      msg = {
+        'func':'',
+        'args': {
+          'stream_id':self.stream_id,
+          'group_id':group_id
+        }
+      }
+      
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      print sys.exc_info()
 
   ##################################################
 
-  def group_leave(self, head, args):
+  def group_leave(self):
     logging.info("group_leave")
     # leave current group and create group
+    
+    try:
+      msg = {
+        'func':'',
+        'args': {
+          'stream_id':self.stream_id
+        }
+      }
+      
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      print sys.exc_info()
 
   ##################################################
 
@@ -260,7 +334,12 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # publish hashtag update
 
     try:
-      msg = {}
+      msg = {
+        'func':'',
+        'args': {
+          'stream_id':self.stream_id
+        }
+      }
       self.make_message(mto=self.MAPPER_JID)
     except:
       logging.error("update_hashtags error")

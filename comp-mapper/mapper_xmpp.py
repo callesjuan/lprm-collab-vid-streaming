@@ -154,31 +154,40 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     try:
       if args["group_jid"] is not None:
         source = args['from']
+        stream_id = args['stream_id']
         group_jid = args['group_jid']
         hashtags = args['hashtags']
         
         stamp = datetime.datetime.now().isoformat()
 
         data = {
+          'stream_id': stream_id,
+          'jid': source,
           'group_jid': group_jid,
           'hashtags': hashtags,
-          'current_stamp': stamp
+          'init_stamp': stamp,
+          'current_stamp': stamp,
+          'status': 'on'
         }
 
-        if self.streams.find_one({'jid':source}) is None:
-          data['jid'] = source
-          data['insert_stamp'] = stamp
-          data['state'] = 'on'
+        if self.streams.find_one({'stream_id':stream_id}) is None:
+          print "initializing stream "  + source
           self.streams.insert(data)
           self.make_presence(pto=source, ptype='subscribe').send()
-        else:
-          self.streams.update({'jid':source}, {'$set':data})
 
         print source , " initiated"
+        
+        group_data = {
+          'group_jid':group,
+          'members':[source], 
+          'banned':[],
+          'insert_stamp':stamp,
+          'hashtags':hashtags
+        }
      
         if self.groups.find_one({'group_jid':group}) is None:
-          print "TRYING TO CREATE GROUP " + group + " AND SOURCE " + source
-          self.groups.insert({'group_jid':group, 'members':[source], 'banned':[], 'insert_stamp':stamp, 'hashtags':hashtags})
+          print "creating group " + group
+          self.groups.insert(group_data)
         else:
           self.groups.update({'group_jid':group}, {'$addToSet':{'members':source}}) # $push/$addToSet
 
@@ -204,11 +213,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   def hnd_stream_close(self, args):
     logging.info("stream_close")
     # leave current group
-
-  ##################################################
-
-  def hnd_stream_exists(self, args):
-    logging.info("stream_exists")
 
   ##################################################
 
