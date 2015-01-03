@@ -3,6 +3,11 @@ import bson.son as son, json, matplotlib.pyplot as plt, pymongo, sleekxmpp
 
 class MapperXMPP(sleekxmpp.ClientXMPP):
 
+  '''
+  CONSTANTS
+  '''
+  MUC_JID = 'conference.localhost
+
   def __init__(self, jid, password, mongo_uri):
     sleekxmpp.ClientXMPP.__init__(self, jid, password)
     self.register_plugin('xep_0004') # Data forms
@@ -19,7 +24,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.local_sources = {}
     self.local_groups = {}
 
-    self.delta_check_autoclose = 60 * 60 # 1 hour
+    self.delta_check_autoclose = 60 * 30 # 30 minutes
     self.timer_check_autoclose = {}
     
     try:
@@ -68,14 +73,15 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   def got_online(self, presence):
     try:
       jid = presence['from']
-      stream = self.streams.find_one({'jid':jid, 'status': {'$not':'end'}})
       
-      if stream is not None:
-        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':stream['last_status']}})
-        
       if self.timer_check_autoclose.has_key(jid):
         self.timer_check_autoclose[jid].cancel()
         self.timer_check_autoclose.pop(jid, None)
+        
+        stream = self.streams.find_one({'jid':jid, 'status': {'$not':'ended'}})
+        
+        if stream is not None:
+          self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':stream['last_status']}})
     except:
       print sys.exc_info()
 
@@ -84,15 +90,16 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   def got_offline(self, presence):
     try:
       jid = presence['from']
-      stream = self.streams.find_one({'jid':jid, 'status': {'$not':'end'}})
-    
-      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'off', 'last_status':stream['status']}})
+      stream = self.streams.find_one({'jid':jid, 'status': {'$not':'ended'}})
+      
+      if stream['status'] == 'on':
+        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'off', 'last_status':stream['status']}})
 
-      if self.timer_check_autoclose.has_key(jid):
-        self.timer_check_autoclose[jid].cancel()
+        if self.timer_check_autoclose.has_key(jid):
+          self.timer_check_autoclose[jid].cancel()
 
-      self.timer_check_autoclose[jid] = threading.Timer(self.delta_check_autoclose, self.check_autoclose, [jid], {})
-      self.timer_check_autoclose[jid].start()
+        self.timer_check_autoclose[jid] = threading.Timer(self.delta_check_autoclose, self.check_autoclose, [jid], {})
+        self.timer_check_autoclose[jid].start()
       
       print 'timer set'
     except:
@@ -105,7 +112,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       stream = self.streams.find_one({'jid': jid, 'status':'off'})
 
       if stream is not None:
-        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'end'}})
+        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'ended'}})
         
         print 'stream closed'
     except:
@@ -175,11 +182,11 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           self.streams.insert(data)
           self.make_presence(pto=source, ptype='subscribe').send()
 
-        print source , " initiated"
+        print stream , " initiated"
         
         group_data = {
           'group_jid':group,
-          'members':[source], 
+          'members':[stream_id], 
           'banned':[],
           'insert_stamp':stamp,
           'hashtags':hashtags
@@ -189,7 +196,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           print "creating group " + group
           self.groups.insert(group_data)
         else:
-          self.groups.update({'group_jid':group}, {'$addToSet':{'members':source}}) # $push/$addToSet
+          self.groups.update({'group_jid':group}, {'$addToSet':{'members':stream_id}}) # $push/$addToSet
 
         print group , " created"
         
@@ -202,29 +209,99 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
   def hnd_stream_pause(self, args):
     logging.info("stream_pause")
+    
+    try:
+      stream = self.streams.find_one({'stream_id':args['stream_id']})
+    
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'off', 'last_status':stream['status']}})
+    
+    except:
+      print sys.exc_info()
 
   ##################################################
 
   def hnd_stream_resume(self, args):
     logging.info("stream_resume")
+    
+    try:
+      stream = self.streams.find_one({'stream_id':args['stream_id']})
+      
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':stream['last_status']}})
+      
+    except:
+      print sys.exc_info()
 
   ##################################################
 
   def hnd_stream_close(self, args):
     logging.info("stream_close")
     # leave current group
+    
+    try:
+      stream = self.streams.find_one({'stream_id':args['stream_id']})
+      
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'ended', 'last_status':stream['statu']}})
+      
+    except:
+      print sys.exc_info()
 
   ##################################################
 
   def hnd_group_join(self, args):
     logging.info("group_join")
     # leave current group and join selected/existing group
+    
+    try:
+      stream = self.streams.find_one({'stream_id':args['stream_id']})
+      
+      if stream['group_jid'] == args['group_jid']:
+        raise Exception('stream is already in that group')
+      
+      current = self.groups.find_one({'group_jid':stream['group_jid']})
+      next = self.groups.find_one({'group_jid':args['stream_id']})
+      
+      if next is None:
+        raise Exception('target group does not exists')
+      
+      # leaving old group
+      self.groups.update({'group_jid':stream['group_jid']}, {'$pull':{'members':stream['stream_id']}})
+      
+      # joining new group
+      self.groups.update({'group_jid':args['group_jid']}, {'$addToSet':{'members':stream['stream_id']}})
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'group_jid':args['group_jid']}})
+      
+    except:
+      print sys.exc_info()
 
   ##################################################
 
   def hnd_group_leave(self, args):
     logging.info("group_leave")
     # leave current group and create group
+    
+    try:
+      stream = self.streams.find_one({'stream_id':args['stream_id']})
+      
+      default_gjid = stream['stream_id'] + '@' + self.MUC_JID
+      
+      if stream['group_jid'] == default_group:
+        raise Exception('stream is already in its default group')
+        
+      default = self.groups.find_one({'group_jid':default_gjid})
+      current = self.groups.find_one({'group_jid':stream['group_jid']})  
+      
+      self.groups.update({'group_jid':stream['group_jid']}, {'$pull':{'members':stream['stream_id']}})
+      
+      if len(current['members']) == 1:
+        self.groups.update({'group_jid':stream['group_jid']}, {'$set':{'status':'empty'}})
+        
+      self.groups.update({'group_jid':default['groupd_jid']}, {'$addToSet':{'members':stream['stream_id']}})
+      
+      if len(default['members']) == 0:
+        self.groups.update({'group_jid':default['group_jid']}, {'$set':{'status':'active'}})
+      
+    except:
+      print sys.exc_info()
 
   ##################################################
 

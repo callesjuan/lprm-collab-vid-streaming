@@ -160,7 +160,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     
       if group_jid is None:
         # self.group_jid = self.hashtags + ";" + self.nick + ";" + stamp + "@" + self.MUC_JID
-        self.group_jid = self.stream_id + "@" + self.MUC_JID
+        self.group_jid = self.stream_id + "_" + stamp + "@" + self.MUC_JID
       else:
         self.group_jid = group_jid
 
@@ -259,11 +259,14 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # leave current group and join selected/existing group
     
     try:
+      if group_id == self.group_id:
+        raise Exception('stream is already in that group')
+    
       msg = {
-        'func':'',
+        'func':'group_join',
         'args': {
           'stream_id':self.stream_id,
-          'group_id':group_id
+          'group_jid':group_id
         }
       }
       
@@ -278,10 +281,16 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # leave current group and create group
     
     try:
+      now = datetime.datetime.now()
+      stamp = now.strftime('%Y%m%d%H%M%S')
+    
+      self.group_jid = self.stream_id + '_' + stamp + '@' + self.MUC_JID
+    
       msg = {
-        'func':'',
+        'func':'group_leave',
         'args': {
-          'stream_id':self.stream_id
+          'stream_id':self.stream_id,
+          'group_jid':self.group_jid
         }
       }
       

@@ -13,8 +13,11 @@ streams
   stream_id
   jid
   group_jid
-  status (on, on+, on-, off, end)
+  status (on, on+, on-, off, ended)
+  status_label
   last_status (on, on+, on-)
+  positive_ratings
+  negative_ratings
   current_latlng
   current_hashtags
   current_stamp
@@ -24,14 +27,14 @@ streams
   
 groups
   group_jid
-  status (init, end)
+  status (active, empty)
   current_centroid
   current_hashtags
   current_stamp
   init_stamp
   close_stamp
   members
-
+  
 updates
   stream_id
   jid
@@ -41,3 +44,20 @@ updates
   stamp
   media
   summary
+  
+======
+
+streams
+  stream_id
+  jid
+  group_jid
+  status (on, off, ended)
+  ratings
+  resources_status (ok, battery_low, bandwith_unstable)
+  physical_status (ok, injured)
+  current_latlng
+  current_hashtags
+  current_stamp
+  current_media
+  init_stamp
+  close_stamp
