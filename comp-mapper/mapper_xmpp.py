@@ -281,24 +281,23 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     
     try:
       stream = self.streams.find_one({'stream_id':args['stream_id']})
-      
-      default_gjid = stream['stream_id'] + '@' + self.MUC_JID
-      
-      if stream['group_jid'] == default_group:
-        raise Exception('stream is already in its default group')
-        
-      default = self.groups.find_one({'group_jid':default_gjid})
-      current = self.groups.find_one({'group_jid':stream['group_jid']})  
-      
       self.groups.update({'group_jid':stream['group_jid']}, {'$pull':{'members':stream['stream_id']}})
       
+      current = self.groups.find_one({'group_jid':stream['group_jid']})      
       if len(current['members']) == 1:
         self.groups.update({'group_jid':stream['group_jid']}, {'$set':{'status':'empty'}})
         
-      self.groups.update({'group_jid':default['groupd_jid']}, {'$addToSet':{'members':stream['stream_id']}})
+      stamp = datetime.datetime.now().isoformat()
       
-      if len(default['members']) == 0:
-        self.groups.update({'group_jid':default['group_jid']}, {'$set':{'status':'active'}})
+      group_data = {
+        'group_jid':args['group_jid'],
+        'members':[args['stream_id']], 
+        'banned':[],
+        'insert_stamp':stamp,
+        'hashtags':stream['current_hashtags']
+      }
+
+      self.groups.insert(group_data)
       
     except:
       print sys.exc_info()
@@ -317,7 +316,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       hashtags = args['hashtags']
 
       # match latlng
-      match = self.groups.find( {'latlng': son.SON([('$near', [lng, lat]), ('$maxDistance', 2)]) })
+      match = self.groups.find( { 'status':'active', 'latlng': son.SON([('$near', [lng, lat]), ('$maxDistance', 2)]) })
       # print match.count()
       groups = []
       for g in match:
