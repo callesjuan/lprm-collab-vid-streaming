@@ -1,0 +1,47 @@
+sources
+  jid
+  pwd
+  twitter
+  twitcasting_id
+  livestream_id
+  ustream_id
+  bambuser_id
+  current_stream
+  streams
+  
+streams
+  stream_id
+  jid
+  group_jid
+  status (streaming, paused, over)
+  resources_status (ok, battery_low, bandwith_unstable)
+  physical_status (ok, detained, surrounded, stuck, injured)
+  positive_ratings
+  negative_ratings
+  latlng
+  hashtags
+  media (twitcasting, livestream, ustream, bambuser)
+  stamp
+  init_stamp
+  close_stamp
+  
+groups
+  group_jid
+  status (populated, empty)
+  centroid
+  hashtags
+  stamp
+  init_stamp
+  close_stamp
+  members
+  banned
+  
+updates
+  stream_id
+  jid
+  group_jid
+  latlng
+  hashtags
+  stamp
+  media
+  summary

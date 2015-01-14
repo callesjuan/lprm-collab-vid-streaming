@@ -1,12 +1,12 @@
-import datetime, dateutil.parser, logging, signal, sys, threading, time
-import bson.son as son, json, matplotlib.pyplot as plt, pymongo, sleekxmpp
+import datetime, dateutil.parser, signal, sys, threading, time, traceback
+import bson.son as son, json, pymongo, sleekxmpp
 
 class MapperXMPP(sleekxmpp.ClientXMPP):
 
   '''
   CONSTANTS
   '''
-  MUC_JID = 'conference.localhost
+  MUC_JID = 'conference.localhost'
 
   def __init__(self, jid, password, mongo_uri):
     sleekxmpp.ClientXMPP.__init__(self, jid, password)
@@ -18,14 +18,14 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     self.register_plugin('xep_0203') # Delayed delivery
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
-    self.add_event_handler('got_online', self.got_online)
-    self.add_event_handler('got_offline', self.got_offline)
+    # self.add_event_handler('got_offline', self.got_offline)
+    # self.add_event_handler('got_online', self.got_online)
 
     self.local_sources = {}
     self.local_groups = {}
 
-    self.delta_check_autoclose = 60 * 30 # 30 minutes
-    self.timer_check_autoclose = {}
+    self.delta_over_timer = 60 * 30 # 30 minutes
+    self.over_timer = {}
     
     try:
       self.mongo = pymongo.MongoClient(mongo_uri)
@@ -43,17 +43,15 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.groups.ensure_index([('current_centroid', pymongo.GEO2D)])
 
     except:
-      print sys.exc_info()
+      traceback.print_exc()
       sys.exit(0)
 
   def handle_start(self, event):
-    logging.info("connected")
     print "connected"
     self.get_roster()
     self.send_presence(pstatus="")
   
   def handle_message(self, message):
-    logging.info(message)
     # print message
     delay = message["delay"].get_stamp()
     if delay is None: # process only if it isn't an offline message
@@ -63,60 +61,54 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         args = jbody["args"] # application arguments
         args['from'] = str(message['from'])
         args['to'] = str(message['to'])
-        func(head, args)
+        func(args)
       except:
-        logging.warning("message error")
-        print sys.exc_info()
-
-  ##################################################
-
-  def got_online(self, presence):
-    try:
-      jid = presence['from']
-      
-      if self.timer_check_autoclose.has_key(jid):
-        self.timer_check_autoclose[jid].cancel()
-        self.timer_check_autoclose.pop(jid, None)
-        
-        stream = self.streams.find_one({'jid':jid, 'status': {'$not':'ended'}})
-        
-        if stream is not None:
-          self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':stream['last_status']}})
-    except:
-      print sys.exc_info()
+        traceback.print_exc()
 
   ##################################################
 
   def got_offline(self, presence):
     try:
-      jid = presence['from']
-      stream = self.streams.find_one({'jid':jid, 'status': {'$not':'ended'}})
+      jid = str(presence['from'])
+      stream = self.streams.find_one({'jid':jid, 'status': {'$ne':'over'}})
       
-      if stream['status'] == 'on':
-        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'off', 'last_status':stream['status']}})
-
-        if self.timer_check_autoclose.has_key(jid):
-          self.timer_check_autoclose[jid].cancel()
-
-        self.timer_check_autoclose[jid] = threading.Timer(self.delta_check_autoclose, self.check_autoclose, [jid], {})
-        self.timer_check_autoclose[jid].start()
-      
-      print 'timer set'
+      if stream is not None:
+        if stream['status'] == 'streaming': 
+          self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'paused'}})
+          
+        self.over_timer[jid] = threading.Timer(self.delta_over_timer, self.autoclose, [jid], {})
+        self.over_timer[jid].start()
+        
     except:
-      print sys.exc_info()
+      traceback.print_exc()
+
+  ##################################################
+  
+  def got_online(self, presence):
+    try:
+      jid = str(presence['from'])
+      
+      if self.over_timer.has_key(jid):
+        self.over_timer[jid].cancel()
+        self.over_timer.pop(jid, None)
+        
+        print 'timer unset'
+            
+    except:
+      traceback.print_exc()
 
   ##################################################
 
-  def check_autoclose(self, stream_id):
+  def autoclose(self, stream_id):
     try:
-      stream = self.streams.find_one({'jid': jid, 'status':'off'})
+      stream = self.streams.find_one({'jid':jid, 'status': {'$ne':'over'}})
 
       if stream is not None:
-        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'ended'}})
+        self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'over'}})
         
         print 'stream closed'
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
   ##################################################
@@ -129,99 +121,137 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   ##################################################
   
   def hnd_stream_status(self, args):
-    logging.info("stream_status")
+    print "stream_status"
+    
     try:
-      source = self.sources.find_one({'jid':args['jid']})
-      stream_id = source['current_stream']
-      
       msg = {
-          'func':'stream_status_reply',
-          'args': {}
+        'func':'stream_status_reply',
+        'args': {}
+      }
+      
+      source = self.sources.find_one({'jid':args['from']})        
+      if source is None:
+        source = {
+          'jid': args['from'],
+          'pwd': None,
+          'twitter_id': None,
+          'twitcasting_id': None,
+          'livestream_id': None,
+          'ustream_id': None,
+          'bambuser_id': None,
+          'current_stream': None,
+          'streams': []
         }
-
-      if stream_id is not None:
-        stream = self.streams.find_one({'stream_id': stream_id})
-        msg['args']['stream'] = {
-          'stream_id': stream['stream_id']
-          'group_jid': stream['group_jid'],
-          'current_latlng': stream['current_latlng'],
-          'current_hashtags': stream['current_hashtags']
-        }
-      else:
-        msg['args']['stream'] = None
+        
+        print "creating source " + args['from']
+        self.sources.insert(source)
+        print args['from'] , " created"
+      msg['args']['source'] = source
+        
+      if source['current_stream'] is not None:
+        stream = self.streams.find_one({'stream_id': source['current_stream'], 'status': {'$ne':'over'}})
+        
+        if stream is not None:
+          msg['args']['stream'] = stream
    
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
-      print sys.exc_info()
+      # print sys.exc_info()
+      traceback.print_exc()
   
   ##################################################
  
   def hnd_stream_init(self, args):
-    logging.info("stream_init")
+    print "stream_init"
+    
     try:
-      if args["group_jid"] is not None:
-        source = args['from']
-        stream_id = args['stream_id']
-        group_jid = args['group_jid']
-        hashtags = args['hashtags']
-        
-        stamp = datetime.datetime.now().isoformat()
+      stamp = datetime.datetime.now().isoformat()
 
-        data = {
-          'stream_id': stream_id,
-          'jid': source,
-          'group_jid': group_jid,
-          'hashtags': hashtags,
+      if self.streams.find_one({'stream_id':args['stream_id']}) is None:
+        stream_data = {
+          'stream_id': args['stream_id'],
+          'jid': args['from'],
+          'group_jid': args['group_jid'],
+          'status': 'streaming',
+          'resources_status': 'ok',
+          'physical_status': 'ok',
+          'positive_ratings': 0,
+          'negative_ratings': 0,
+          'latlng': args['latlng'],
+          'hashtags': args['hashtags'],
+          'init_stamp': args['stamp'],
+          'media': args['media'],
+          'stamp': stamp,
           'init_stamp': stamp,
-          'current_stamp': stamp,
-          'status': 'on'
+          'close_stamp': None
         }
-
-        if self.streams.find_one({'stream_id':stream_id}) is None:
-          print "initializing stream "  + source
-          self.streams.insert(data)
-          self.make_presence(pto=source, ptype='subscribe').send()
-
-        print stream , " initiated"
+        print "initializing stream "  + args['stream_id']
+        self.streams.insert(stream_data)
+        self.make_presence(pto=source, ptype='subscribe').send()
+        print args['stream_id'] , " initiated"
         
-        group_data = {
-          'group_jid':group,
-          'members':[stream_id], 
-          'banned':[],
-          'insert_stamp':stamp,
-          'hashtags':hashtags
-        }
-     
-        if self.groups.find_one({'group_jid':group}) is None:
-          print "creating group " + group
+        print "updating source " + args['from']
+        self.sources.update({'jid':args['from']}, {'$set':{'current_stream':args['stream_id'], 'twitcasting_id':args['twitcasting_id']}})
+        self.sources.update({'jid':args['from']}, {'$addToSet':{'streams':args['stream_id']}})
+        print args['from'] , " updated"
+   
+        group = self.groups.find_one({'group_jid':args['group_jid']})
+        if group is None:
+          group_data = {
+            'group_jid':args['group_jid'],
+            'status':'populated',
+            'centroid':args['latlng'],
+            'hashtags':args['hashtags'],
+            'stamp':stamp,
+            'init_stamp':stamp,
+            'close_stamp':None,
+            'members':[args['stream_id']],
+            'banned':[]
+          }
+          print "creating group " + args['group_jid']
           self.groups.insert(group_data)
+          print args['group_jid'] , " created"
         else:
-          self.groups.update({'group_jid':group}, {'$addToSet':{'members':stream_id}}) # $push/$addToSet
-
-        print group , " created"
+          # group_hashtags = group['hashtags'] + args['hashtags']
+          self.groups.update({'group_jid':args['group_jid']}, {'$set':{'stamp':stamp}})
+          self.groups.update({'group_jid':args['group_jid']}, {'$addToSet':{'members':args['stream_id']}}) # $push/$addToSet
+          print args['group_jid'] , " updated"
         
     except:
-      logging.error("stream_init error")
-      logging.error(sys.exc_info())
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def hnd_stream_pause(self, args):
-    logging.info("stream_pause")
+    print "stream_pause"
     
     try:
       stream = self.streams.find_one({'stream_id':args['stream_id']})
     
-      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'off', 'last_status':stream['status']}})
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'paused'}})
+      
+      # if self.over_timer.has_key(stream['jid']):
+      #     self.over_timer[stream['jid']].cancel()
+      # self.over_timer[stream['jid']] = threading.Timer(self.delta_over_timer, self.autoclose, [stream['jid']], {})
+      # self.over_timer[stream['jid']].start()
+      # print stream['jid'] , ' timer set'
+      
+      msg = {
+        'func':'stream_pause_reply',
+        'args': {
+          'delta': self.delta_over_timer
+         }
+      }
+      
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def hnd_stream_resume(self, args):
-    logging.info("stream_resume")
+    print "stream_resume"
     
     try:
       stream = self.streams.find_one({'stream_id':args['stream_id']})
@@ -229,26 +259,27 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':stream['last_status']}})
       
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def hnd_stream_close(self, args):
-    logging.info("stream_close")
+    print "stream_close"
     # leave current group
     
     try:
       stream = self.streams.find_one({'stream_id':args['stream_id']})
       
-      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'ended', 'last_status':stream['statu']}})
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'ended', 'last_status':stream['status']}})
+      self.sources.update({'jid':args['from']}, {'$set':{'current_stream':None}})
       
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def hnd_group_join(self, args):
-    logging.info("group_join")
+    print "group_join"
     # leave current group and join selected/existing group
     
     try:
@@ -271,12 +302,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'group_jid':args['group_jid']}})
       
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def hnd_group_leave(self, args):
-    logging.info("group_leave")
+    print "group_leave"
     # leave current group and create group
     
     try:
@@ -300,20 +331,18 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.groups.insert(group_data)
       
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def hnd_group_match(self, args):
-    logging.info("group_match")
+    print "group_match"
     # find groups matching geolocation + hashtags
     
     try:
-      source = args['from']
       latlng = args['latlng'].split(',')
       lat = int(latlng[0])
       lng = int(latlng[1])
-      hashtags = args['hashtags']
 
       # match latlng
       match = self.groups.find( { 'status':'active', 'latlng': son.SON([('$near', [lng, lat]), ('$maxDistance', 2)]) })
@@ -337,14 +366,14 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         }
       }
 
-      self.make_message(mto=source, mbody=json.dumps(msg)).send()
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def hnd_update_latlng(self, args):
-    logging.info("update_latlng")
+    print "update_latlng"
 
     try:
       # publish current geolocation + sensor data + battery level
@@ -381,12 +410,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       print "centroid calculated"
 
     except:
-      print sys.exc_info()
+      traceback.print_exc()
       
   ##################################################
 
   def hnd_update_hashtags(self, args):
-    logging.info("update_hashtags")
+    print "update_hashtags"
     # publish hashtag update
 
   ##################################################
@@ -412,9 +441,6 @@ client = None
 def main(argv):
   signal.signal(signal.SIGINT, signal_handler)
   
-  logging.basicConfig(filename='mapper_xmpp.log',level=logging.DEBUG)
-  logging.info("mapper started")
-  
   global client
 
   jid = "comp-mapper@localhost/console"
@@ -424,29 +450,16 @@ def main(argv):
   client = MapperXMPP(jid, pwd, mongo_uri)
   client.connect()
   client.process()
-
-  fig = plt.figure()
-  plt.ion()
-  plt.show()
-
+  time.sleep(1)
+  
   while True:
-    time.sleep(5)
-    
-    plot_x = []
-    plot_y = []
-
-    sources = client.sources.find({'status':'on'})
-    for source in sources:
-      if source.has_key('latlng'):
-        latlng = source['latlng']
-        plot_x.append(latlng[0])
-        plot_y.append(latlng[1])
-
-    plt.clf()
-    plt.axis([-20,20,-20,20])
-    plt.plot(plot_x, plot_y, 'ro')
-    plt.draw()
-    pass
+      try:
+        msg_in = raw_input("> ")
+        client.handle_func(msg_in)
+        pass
+      except KeyboardInterrupt, EOFError:
+        client.disconnect(wait=True)
+        break
 
 if __name__ == '__main__':
   main(sys.argv[1:])

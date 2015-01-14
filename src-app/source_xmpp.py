@@ -1,4 +1,4 @@
-import datetime, getopt, logging, signal, sys, time
+import datetime, getopt, signal, sys, time, traceback
 import json, sleekxmpp
 
 class SourceXMPP(sleekxmpp.ClientXMPP):
@@ -21,30 +21,31 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.add_event_handler("message", self.handle_message)
     self.auto_authorize = True
 
-    self.jid = jid
+    self.JID = jid
     self.pwd = pwd
-    self.twitter_id = None
-    self.twitcasting_id = None
-    self.livestream_id = None
-    self.ustream_id = None
-    
     self.muc_nick = jid.split("@")[0]
-
-    self.stream_id = None
-    self.group_jid = None
-    self.current_latlng = None
-    self.current_hashtags = None
     
+    self.twitcasting_id = None
+    
+    self.stream_ID = None
+    self.group_JID = None
+    self.hashtags = None
+    self.latlng = None
+    self.media = None
+    
+    self.source = None
+    self.stream = None
+        
     self.stream_status_required = True  # should change back to True whenever the stream is paused (including when the entire app is paused - sent to background)
+    
+    print 'source ' , self.JID
 
   def handle_start(self, event):
-    logging.info("connected")
     print "connected"
     self.get_roster()
     self.send_presence(pstatus="")
 
   def handle_message(self, message):
-    logging.info(message)
     # print message
     delay = message["delay"].get_stamp()
     if delay is None: # process only if it isn't an offline message
@@ -56,9 +57,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         args['to'] = str(message['to'])
         func(args)
       except:
-        logging.error("message error")
-        logging.error(sys.exc_info)
-        print sys.exc_info()
+        traceback.print_exc()
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
 
   def handle_func(self, str_func):
@@ -82,6 +81,20 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
 
   def print_latlng(self):
     print self.latlng
+    
+  def set_media(self, media):
+    self.media = media
+    print "set media " + self.media
+
+  def print_media(self):
+    print self.media
+    
+  def set_twitcasting_id(self, twitcasting_id):
+    self.twitcasting_id = twitcasting_id
+    print "set twitcasting_id" + self.twitcasting_id
+
+  def print_twitcasting_id(self):
+    print self.twitcasting_id
 
   ##################################################
   ##################################################
@@ -93,25 +106,23 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   ##################################################
   ##################################################
     
-  def hnd_bad_message_reply(self, args):
+  def hnd_message_exception_reply(self, args):
     print 'bad message reply'
 
   ##################################################
 
   def hnd_stream_status_reply(self, args):
     print 'stream status reply'
+    print args
     try:
-      current_stream = json.loads(args['stream'])
-      if current_stream is not None
-        self.stream_id = current_stream['stream_id']
-        self.group_jid = current_stream['group_jid']
-        self.current_latlng = current_stream['current_latlng']
-        self.current_hashtags = current_stream['current_hashtags']
+      self.source = args['source']
+      if self.twitcasting_id is None:
+        self.twitcasting_id = args['twitcasting_id']
+      if args.has_key('stream'):
+        self.stream = args['stream']
       self.stream_status_required = False
     except:
-      logging.error("stream_status_reply error")
-      logging.error(sys.exc_info())
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
  
@@ -132,130 +143,126 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       msg = {
         'func': 'stream_status',
-        'args': {
-          'jid': self.jid
-        }
+        'args': {}
       }
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
-      logging.error("stream_status error")
-      logging.error(sys.exc_info())
-      print sys.exc_info()
+      traceback.print_exc()
   
   ##################################################
   
   def stream_init(self, group_jid=None):
-    logging.info("stream_init")
     print "initiating stream"
     
     try:
       if self.stream_status_required == True:
         raise Exception('stream_status message is required')
-      if self.stream_id is not None:
+      if self.stream_ID is not None:
         raise Exception('there is already an active or pending stream')
+      if self.media == None:
+        raise Exception('current_media missing')
+      if self.twitcasting_id == None:
+        raise Exception('twitcasting_id missing')
       
       now = datetime.datetime.now()
       stamp = now.strftime('%Y%m%d%H%M%S')
-      self.stream_id = self.nick + "_" + stamp
+      self.stream_ID = self.muc_nick + "__" + stamp
     
       if group_jid is None:
-        # self.group_jid = self.hashtags + ";" + self.nick + ";" + stamp + "@" + self.MUC_JID
-        self.group_jid = self.stream_id + "_" + stamp + "@" + self.MUC_JID
+        self.group_jid = self.stream_ID + "__" + stamp + "@" + self.MUC_JID
       else:
         self.group_jid = group_jid
 
       msg = {
         'func':'stream_init',
         'args': {
-          'stream_id': self.stream_id,
+          'stream_id': self.stream_ID,
           'group_jid': self.group_jid,
-          'hashtags' : self.hashtags # self.hashtags.replace("#",";")
+          'hashtags': self.hashtags, # self.hashtags.replace("#",";")
+          'latlng': self.latlng,
+          'media': self.media,
+          'twitcasting_id': self.twitcasting_id,
+          'stamp': stamp
         }
       }
-      pto_jid = str(self.group_jid+"/"+self.nick)
+      
+      pto_jid = str(self.group_jid+"/"+self.muc_nick)
       self.make_presence(pto=pto_jid).send()
+      
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "stream_initiated"
       
     except:
-      logging.error("stream_init error")
-      logging.error(sys.exc_info())
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def stream_pause(self):
-    logging.info("stream_pause")
-    
     try:
-      if self.stream_id is None:
+      if self.stream is None:
         raise Exception('there is no active stream')
     
       msg = {
         'func':'stream_pause',
         'args': {
-          'stream_id':self.stream_id
+          'stream_id':self.stream['stream_id']
         }
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       self.stream_status_required = True
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def stream_resume(self):
-    logging.info("stream_resume")
-    
     try:
       if self.stream_status_required == True:
         raise Exception('stream_status message is required')
-      if self.stream_id is None:
+      if self.stream is None:
         raise Exception('there is no pending stream')
       
       msg = {
         'func':'stream_resume',
         'args': {
-          'stream_id':self.stream_id
+          'stream_id':self.stream['stream_id']
         }
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def stream_close(self):
-    logging.info("stream_close")
     # leave current group
     
     try:
-      if self.stream_id is None:
+      if self.stream_ID is None:
         raise Exception('there is neither an active or pending stream')
     
       msg = {
         'func':'stream_close',
         'args': {
-          'stream_id':self.stream_id
+          'stream_id':self.stream_ID
         }
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       
-      self.stream_id = None
+      self.stream_ID = None
       self.group_jid = None
       self.current_latlng = None
-      self.current_hashtags = None
+      self.hashtags = None
       self.stream_status_required = True
     except:
-      print sys.exc_info()
+      traceback.print_exc()
       
   ##################################################
 
   def group_join(self, group_id):
-    logging.info("group_join")
     # leave current group and join selected/existing group
     
     try:
@@ -265,43 +272,41 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       msg = {
         'func':'group_join',
         'args': {
-          'stream_id':self.stream_id,
+          'stream_id':self.stream_ID,
           'group_jid':group_id
         }
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def group_leave(self):
-    logging.info("group_leave")
     # leave current group and create group
     
     try:
       now = datetime.datetime.now()
       stamp = now.strftime('%Y%m%d%H%M%S')
     
-      self.group_jid = self.stream_id + '_' + stamp + '@' + self.MUC_JID
+      self.group_jid = self.stream_ID + '_' + stamp + '@' + self.MUC_JID
     
       msg = {
         'func':'group_leave',
         'args': {
-          'stream_id':self.stream_id,
+          'stream_id':self.stream_ID,
           'group_jid':self.group_jid
         }
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
   def group_match(self):
-    logging.info("group_match")
     # find groups matching geolocation + hashtags
 
     try:
@@ -314,46 +319,41 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
-      logging.error("group_match error")
-      logging.error(sys.exc_info())
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
-  def update_location(self, latlng):
-    logging.info("update_location")
+  def update_stream_latlng(self, latlng):
     # publish current geolocation + sensor data + battery level
     
     try:
       msg = {
-        'func':'update_location',
+        'func':'update_stream_latlng',
         'args': {
-          'latlng': latlng 
+          'latlng': latlng
         }
       }
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
-      print "location sent"
+      print "latlng sent"
     except:
-      print sys.exc_info()
+      traceback.print_exc()
 
   ##################################################
 
-  def update_hashtags(self):
-    logging.info("update_hashtags")
+  def update_stream_hashtags(self, hashtags):
     # publish hashtag update
 
     try:
       msg = {
-        'func':'',
+        'func':'update_stream_hashtags',
         'args': {
-          'stream_id':self.stream_id
+          'hashtags': hashtags
         }
       }
       self.make_message(mto=self.MAPPER_JID)
+      print "hashtags sent"
     except:
-      logging.error("update_hashtags error")
-      logging.error(sys.exc_info())
-      print sys.exc_info()
+      traceback.print_exc()
 
 '''
 CONSOLE
@@ -367,19 +367,6 @@ client = None
 
 def main(argv):
   signal.signal(signal.SIGINT, signal_handler)
-
-  logging.basicConfig(filename='source_xmpp.log',level=logging.DEBUG)
-  
-  '''
-  root = logging.getLogger()
-  ch = logging.StreamHandler(sys.stdout)
-  ch.setLevel(logging.INFO)
-  formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-  ch.setFormatter(formatter)
-  root.addHandler(ch)
-  '''
-  
-  logging.info("source started")
   
   global client
   
@@ -397,16 +384,12 @@ def main(argv):
         jid = arg + "/lprm"
       if opt in ('-p', '--pwd'):
         pwd = arg
-      if opt in ('-h', '--hts'):
-        hts = arg
 
     '''
     RUN
     '''
     
     client = SourceXMPP(jid, pwd)
-    if 'hts' in locals():
-      client.set_hashtags(hts)
     client.connect()
     client.process()
     time.sleep(1)
@@ -421,8 +404,7 @@ def main(argv):
         break
     
   except Exception as e:
-    logging.error("error")
-    print sys.exc_info()
+    traceback.print_exc()
     sys.exit(0)
 
 if __name__ == '__main__':
