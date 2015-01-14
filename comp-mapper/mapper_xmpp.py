@@ -191,7 +191,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         print args['stream_id'] , " initiated"
         
         print "updating source " + args['from']
-        self.sources.update({'jid':args['from']}, {'$set':{'current_stream':args['stream_id'], 'twitcasting_id':args['twitcasting_id']}})
+        self.sources.update({'jid':args['from']}, {'$set':{'current_stream':args['stream_id']]}})
         self.sources.update({'jid':args['from']}, {'$addToSet':{'streams':args['stream_id']}})
         print args['from'] , " updated"
    
@@ -216,9 +216,18 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           self.groups.update({'group_jid':args['group_jid']}, {'$set':{'stamp':stamp}})
           self.groups.update({'group_jid':args['group_jid']}, {'$addToSet':{'members':args['stream_id']}}) # $push/$addToSet
           print args['group_jid'] , " updated"
-        
+          
+        msg = {
+          'func':'stream_init_reply',
+          'args': {
+            'stream': stream_data
+          }
+        }
+        self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':sys.exc_info()}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
 
@@ -229,6 +238,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       stream = self.streams.find_one({'stream_id':args['stream_id']})
     
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'paused'}})
+      stream['status'] = 'paused'
       
       # if self.over_timer.has_key(stream['jid']):
       #     self.over_timer[stream['jid']].cancel()
@@ -239,12 +249,11 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       msg = {
         'func':'stream_pause_reply',
         'args': {
+          'stream': stream,
           'delta': self.delta_over_timer
          }
       }
-      
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
-    
     except:
       traceback.print_exc()
 
@@ -256,8 +265,16 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     try:
       stream = self.streams.find_one({'stream_id':args['stream_id']})
       
-      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':stream['last_status']}})
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'streaming'}})
+      stream['status'] = 'streaming'
       
+      msg = {
+        'func':'stream_resume_reply',
+        'args': {
+          'stream': stream
+         }
+      }
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
       traceback.print_exc()
 
@@ -270,9 +287,16 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     try:
       stream = self.streams.find_one({'stream_id':args['stream_id']})
       
-      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'ended', 'last_status':stream['status']}})
+      self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'over'}})
       self.sources.update({'jid':args['from']}, {'$set':{'current_stream':None}})
       
+      msg = {
+        'func':'stream_close_reply',
+        'args': { 
+          'stream': None
+        }
+      }
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
       traceback.print_exc()
 
@@ -289,7 +313,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         raise Exception('stream is already in that group')
       
       current = self.groups.find_one({'group_jid':stream['group_jid']})
-      next = self.groups.find_one({'group_jid':args['stream_id']})
+      next = self.groups.find_one({'group_jid':args['group_jid']})
       
       if next is None:
         raise Exception('target group does not exists')
@@ -300,6 +324,14 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       # joining new group
       self.groups.update({'group_jid':args['group_jid']}, {'$addToSet':{'members':stream['stream_id']}})
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'group_jid':args['group_jid']}})
+      
+      msg = {
+        'func':'group_join_reply',
+        'args': { 
+          'group_jid': args['group_jid']
+        }
+      }
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
     except:
       traceback.print_exc()
@@ -327,8 +359,15 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'insert_stamp':stamp,
         'hashtags':stream['current_hashtags']
       }
-
       self.groups.insert(group_data)
+      
+      msg = {
+        'func':'group_leave_reply',
+        'args': { 
+          'group_jid': args['group_jid']
+        }
+      }
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
     except:
       traceback.print_exc()
@@ -356,28 +395,24 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         groups.append(d)
       
       # print groups
-
       # match hashtags
       msg = {
         'func':'group_match_reply',
         'args': {
-          'count': match.count(),
-          'groups': groups
+          'matched_groups': groups
         }
       }
-
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
       traceback.print_exc()
 
   ##################################################
 
-  def hnd_update_latlng(self, args):
-    print "update_latlng"
+  def hnd_update_stream_latlng(self, args):
+    print "update_stream_latlng"
 
     try:
       # publish current geolocation + sensor data + battery level
-      jid = args['from']
       latlng = args['latlng'].split(',')
       lat = float(latlng[0])
       lng = float(latlng[1])
@@ -388,14 +423,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'latlng': [lng, lat],
         'update_stamp': stamp
       }
-      self.streams.update({'jid':jid}, {'$set': data})
+      self.streams.update({'jid':args['from']}, {'$set': data})
       print "location updated"
 
       # calculate centroids
-      group = self.groups.find_one({'members' : {'$in' : [jid]}})
-      # src = self.streams.find_one({'jid':jid})
-      # group = self.groups.find_one({'group_jid':src['group']})
-      members = self.streams.find({'group' : group['group_jid']})
+      source = self.sources.find_one({'jid':args['from']})
+      members = self.groups.find({'group_jid':source['group_jid']
   
       sum_lat = 0
       sum_lng = 0
@@ -406,7 +439,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
       lat = sum_lat/members.count()
       lng = sum_lng/members.count()
-      self.groups.update({'group_jid':group['group_jid']}, {'$set' : {'latlng' : [lng, lat]}})
+      self.groups.update({'group_jid':source['group_jid']}, {'$set' : {'centroid' : [lng, lat]}})
       print "centroid calculated"
 
     except:
@@ -414,9 +447,15 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
   ##################################################
 
-  def hnd_update_hashtags(self, args):
-    print "update_hashtags"
+  def hnd_update_stream_hashtags(self, args):
+    print "update_stream_hashtags"
     # publish hashtag update
+
+  ##################################################
+  
+  def hnd_update_source_twitcasting_id(self, args):
+    print "update_source_twitcasting_id"
+    self.sources.update({'jid':args['from']}, {'$set': {'twitcasting_id':args['twitcasting_id']}})
 
   ##################################################
   ##################################################

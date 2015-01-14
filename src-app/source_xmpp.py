@@ -32,6 +32,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.hashtags = None
     self.latlng = None
     self.media = None
+    self.delta_over_time = None
+    
+    self.matched_groups = None
     
     self.source = None
     self.stream = None
@@ -63,38 +66,14 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   def handle_func(self, str_func):
     arr_func = str_func.split(" ")
     func = getattr(self, arr_func[0])
-    if len(arr_func) == 1:
-      func()
-    else:
-      func(arr_func[1])
+    arr_func.pop(0)
+    func(*arr_func)
+
+  def print_source(self):
+    print self.source
     
-  def set_hashtags(self, hashtags):
-    self.hashtags = hashtags
-    print "set hashtags " + self.hashtags
-
-  def print_hashtags(self):
-    print self.hashtags
-
-  def set_latlng(self, latlng):
-    self.latlng = latlng
-    print "set latlgn " + self.latlng
-
-  def print_latlng(self):
-    print self.latlng
-    
-  def set_media(self, media):
-    self.media = media
-    print "set media " + self.media
-
-  def print_media(self):
-    print self.media
-    
-  def set_twitcasting_id(self, twitcasting_id):
-    self.twitcasting_id = twitcasting_id
-    print "set twitcasting_id" + self.twitcasting_id
-
-  def print_twitcasting_id(self):
-    print self.twitcasting_id
+  def print_stream(self):
+    print self.stream
 
   ##################################################
   ##################################################
@@ -107,7 +86,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   ##################################################
     
   def hnd_message_exception_reply(self, args):
-    print 'bad message reply'
+    print 'message_exception_reply'
+    print args['exception']
 
   ##################################################
 
@@ -125,9 +105,75 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       traceback.print_exc()
 
   ##################################################
- 
+  
+  def hnd_stream_init_reply(self, args):
+    print 'stream_init_reply'
+    print args
+    try:
+      self.stream = args['stream']
+    except:
+      traceback.print_exc()
+
+  ##################################################
+  
+  def hnd_stream_pause_reply(self, args):
+    print 'stream_pause_reply'
+    print args
+    try:
+      self.stream = args['stream']
+      self.delta_over_time = args['delta_over_time']
+      print 'automatically closing after ' , self.delta_over_time , ' seconds'
+    except:
+      traceback.print_exc()
+
+  ##################################################
+  
+  def hnd_stream_resume_reply(self, args):
+    print 'stream_resume_reply'
+    print args
+    try:
+      self.stream = args['stream']
+    except:
+      traceback.print_exc()
+
+  ##################################################
+      
+  def hnd_stream_close_reply(self, args):
+    print 'stream_close_reply'
+    print args
+    try:
+      self.stream = args['stream']
+      if self.stream is None:
+        self.stream_ID = None
+        self.group_jid = None
+        self.latlng = None
+        self.hashtags = None
+        self.media = None
+        self.delta_over_time = None
+        self.stream_status_required = True
+    except:
+      traceback.print_exc()
+      
+  ##################################################
+   
+  def hnd_group_join_reply(self, args):
+    print 'group_join_reply'
+    self.stream['group_jid'] = args['group_jid']
+    self.group_jid = args['group_jid']
+    
+  ##################################################
+   
+  def hnd_group_leave_reply(self, args):
+    print 'group_leave_reply'
+    self.stream['group_jid'] = args['group_jid']
+    self.group_jid = args['group_jid']
+
+  ##################################################
+   
   def hnd_group_match_reply(self, args):
-    print 'group match reply'
+    print 'group_match_reply'
+    self.matched_groups = args['matched_groups']
+    print self.matched_groups
 
   ##################################################
   ##################################################
@@ -151,18 +197,18 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   
   ##################################################
   
-  def stream_init(self, group_jid=None):
+  def stream_init(self, media, group_jid=None):
     print "initiating stream"
     
     try:
       if self.stream_status_required == True:
         raise Exception('stream_status message is required')
-      if self.stream_ID is not None:
+      if self.stream is not None:
         raise Exception('there is already an active or pending stream')
-      if self.media == None:
-        raise Exception('current_media missing')
       if self.twitcasting_id == None:
         raise Exception('twitcasting_id missing')
+        
+      self.media = media
       
       now = datetime.datetime.now()
       stamp = now.strftime('%Y%m%d%H%M%S')
@@ -181,7 +227,6 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
           'hashtags': self.hashtags, # self.hashtags.replace("#",";")
           'latlng': self.latlng,
           'media': self.media,
-          'twitcasting_id': self.twitcasting_id,
           'stamp': stamp
         }
       }
@@ -240,23 +285,17 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # leave current group
     
     try:
-      if self.stream_ID is None:
+      if self.stream is None:
         raise Exception('there is neither an active or pending stream')
     
       msg = {
         'func':'stream_close',
         'args': {
-          'stream_id':self.stream_ID
+          'stream_id':self.stream['stream_id']
         }
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
-      
-      self.stream_ID = None
-      self.group_jid = None
-      self.current_latlng = None
-      self.hashtags = None
-      self.stream_status_required = True
     except:
       traceback.print_exc()
       
@@ -266,13 +305,15 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # leave current group and join selected/existing group
     
     try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
       if group_id == self.group_id:
         raise Exception('stream is already in that group')
     
       msg = {
         'func':'group_join',
         'args': {
-          'stream_id':self.stream_ID,
+          'stream_id':self.stream['stream_id'],
           'group_jid':group_id
         }
       }
@@ -287,16 +328,19 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # leave current group and create group
     
     try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+    
       now = datetime.datetime.now()
       stamp = now.strftime('%Y%m%d%H%M%S')
     
-      self.group_jid = self.stream_ID + '_' + stamp + '@' + self.MUC_JID
+      group_jid = self.stream['stream_id'] + '_' + stamp + '@' + self.MUC_JID
     
       msg = {
         'func':'group_leave',
         'args': {
-          'stream_id':self.stream_ID,
-          'group_jid':self.group_jid
+          'stream_id':self.stream['stream_id'],
+          'group_jid':group_jid
         }
       }
       
@@ -326,32 +370,61 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   def update_stream_latlng(self, latlng):
     # publish current geolocation + sensor data + battery level
     
-    try:
-      msg = {
-        'func':'update_stream_latlng',
-        'args': {
-          'latlng': latlng
+    self.latlng = latlng
+    
+    if self.stream is None:
+      print 'latlng locally updated'
+    else:
+      try:
+        msg = {
+          'func':'update_stream_latlng',
+          'args': {
+            'latlng': latlng
+          }
         }
-      }
-      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
-      print "latlng sent"
-    except:
-      traceback.print_exc()
+        self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+        self.stream['latlng'] = latlng
+        print 'latlng remotely updated'
+      except:
+        traceback.print_exc()
 
   ##################################################
 
   def update_stream_hashtags(self, hashtags):
     # publish hashtag update
 
+    self.hashtags = hashtags
+    
+    if self.stream is None:
+      print 'hashtags locally updated'
+    else:
+      try:
+        msg = {
+          'func':'update_stream_hashtags',
+          'args': {
+            'hashtags': hashtags
+          }
+        }
+        self.make_message(mto=self.MAPPER_JID)
+        self.stream['hashtags'] = hashtags
+        print 'hashtags remotely updated'
+      except:
+        traceback.print_exc()
+      
+  ##################################################
+
+  def update_source_twitcasting_id(self, twitcasting_id):
+    self.twitcasting_id = twitcasting_id
+
     try:
       msg = {
-        'func':'update_stream_hashtags',
+        'func':'update_source_twitcasting_id',
         'args': {
-          'hashtags': hashtags
+          'twitcasting_id': twitcasting_id
         }
       }
       self.make_message(mto=self.MAPPER_JID)
-      print "hashtags sent"
+      print "twitcasting_id remotely updated"
     except:
       traceback.print_exc()
 
