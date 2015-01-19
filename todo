@@ -1,0 +1,1 @@
+implement a 'group_map' message which retrieves group members with their latlng and respective status (device, physical and ratings)

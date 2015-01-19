@@ -1,2 +1,28 @@
-source
+source|external_source->mapper/stream_lifecycle                   (presence)|tests  *source only  **external_source|outer_source|proxy only
   stream_status
+  stream_init*
+  stream_pause*
+  stream_resume*
+  stream_close*
+  group_match
+  group_join
+  group_leave
+  group_fetch_members
+  update_latlng
+  update_hashtags
+  stream_register**
+  
+source|external_source|viewer->source|external_source/pings       (collaboration|notifications|minimap)|design  *source only
+  ping_target
+  ping_danger
+  ping_assist
+  ping_onmyway
+  ping_rate_negative*
+
+viewer->source|external_source/feedback                           (collaboration|context_improvement)|design
+  stream_rate_positive
+  stream_rate_negative
+  improve_hashtags
+  improve_latlng
+
+source->source/chat                                               (collaboration|conversation)|ignore

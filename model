@@ -7,15 +7,15 @@ sources
   ustream_id
   bambuser_id
   current_stream
-  streams
+  streams[]
   
 streams
   stream_id
   jid
   group_jid
   status (streaming, paused, over)
-  resources_status (ok, battery_low, bandwith_unstable)
-  physical_status (ok, detained, surrounded, stuck, injured)
+  device_status (ok, battery_low, bandwith_unstable) # can use | for multiple statuses (OR operator)
+  general_status (ok, detained, surrounded, stuck, injured) # can use | for multiple statuses (OR operator)
   positive_ratings
   negative_ratings
   latlng
@@ -27,14 +27,14 @@ streams
   
 groups
   group_jid
-  status (populated, empty)
+  status (active, idle)
   centroid
   hashtags
   stamp
   init_stamp
   close_stamp
-  members
-  banned
+  members[]
+  banned[]
   
 updates
   stream_id

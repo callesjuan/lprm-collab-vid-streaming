@@ -205,8 +205,12 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         raise Exception('stream_status message is required')
       if self.stream is not None:
         raise Exception('there is already an active or pending stream')
-      if self.twitcasting_id == None:
+      if self.twitcasting_id is None:
         raise Exception('twitcasting_id missing')
+      if self.hashtags is None:
+        raise Exception('hashtags missing')
+      if self.latlng is None:
+        raise Exception('latlng missing')
         
       self.media = media
       
@@ -301,20 +305,20 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       
   ##################################################
 
-  def group_join(self, group_id):
+  def group_join(self, group_JID):
     # leave current group and join selected/existing group
     
     try:
       if self.stream is None:
         raise Exception('there is no active stream')
-      if group_id == self.group_id:
+      if group_JID == self.group_JID:
         raise Exception('stream is already in that group')
     
       msg = {
         'func':'group_join',
         'args': {
           'stream_id':self.stream['stream_id'],
-          'group_jid':group_id
+          'group_jid':group_JID
         }
       }
       
@@ -364,10 +368,30 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
       traceback.print_exc()
+      
+  ##################################################
+
+  def group_fetch(self):
+    # fetches information about a given group, specially its members
+
+    try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+    
+      msg = {
+        'func':'group_fetch',
+        'args': {
+          'stream_id':self.stream['stream_id'],
+          'group_jid': self.stream['group_jid']
+        }
+      }
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      traceback.print_exc()
 
   ##################################################
 
-  def update_stream_latlng(self, latlng):
+  def update_latlng(self, latlng):
     # publish current geolocation + sensor data + battery level
     
     self.latlng = latlng
@@ -377,8 +401,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     else:
       try:
         msg = {
-          'func':'update_stream_latlng',
+          'func':'update_latlng',
           'args': {
+            'stream_id': self.stream['stream_id'],
             'latlng': latlng
           }
         }
@@ -390,7 +415,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
 
   ##################################################
 
-  def update_stream_hashtags(self, hashtags):
+  def update_hashtags(self, hashtags):
     # publish hashtag update
 
     self.hashtags = hashtags
@@ -400,8 +425,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     else:
       try:
         msg = {
-          'func':'update_stream_hashtags',
+          'func':'update_hashtags',
           'args': {
+            'stream_id':self.stream['stream_id'],
             'hashtags': hashtags
           }
         }
