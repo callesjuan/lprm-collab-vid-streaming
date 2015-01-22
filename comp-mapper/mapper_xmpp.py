@@ -6,8 +6,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   '''
   CONSTANTS
   '''
-  MUC_JID = 'conference.localhost'
   AUTOCLOSE = False
+  DOMAIN = 'localhost'
+  MUC_JID = 'conference.localhost'
 
   def __init__(self, jid, password, mongo_uri):
     sleekxmpp.ClientXMPP.__init__(self, jid, password)
@@ -63,6 +64,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         func = getattr(self, "hnd_" + jbody["func"]) # gets reference for the application function
         args = jbody["args"] # application arguments
         args['from'] = str(message['from'])
+        args['jid'] = args['from'].split('@')[0]
         args['to'] = str(message['to'])
         func(args)
       except:
@@ -72,11 +74,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
   def got_offline(self, presence):
     try:
-      jid = str(presence['from'])
+      jid = str(presence['from']).split('@')[0]
       stream = self.streams.find_one({'jid':jid, 'status': {'$ne':'over'}})
       
       if stream is not None and stream['status'] == 'streaming':
         self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'paused'}})
+        print 'got_offline stream_pause'
         
         if self.AUTOCLOSE and not self.over_timer.has_key(stream['jid']):
           self.over_timer[jid] = threading.Timer(self.delta_over_timer, self.autoclose, [jid], {})
@@ -117,10 +120,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'args': {}
       }
       
-      source = self.sources.find_one({'jid':args['from']})        
+      source = self.sources.find_one({'jid':args['jid']}, {'_id': 0})        
       if source is None:
         source = {
-          'jid': args['from'],
+          'jid': args['jid'],
           'pwd': None,
           'twitter_id': None,
           'twitcasting_id': None,
@@ -131,17 +134,19 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'streams': []
         }
         
-        print "creating source " + args['from']
-        self.sources.insert(source)
-        print args['from'] , " created"
+        print "creating source " + args['jid']
+        self.sources.insert(source, manipulate=False)
+        self.make_presence(pto=args['from'], ptype='subscribe').send()
+        print args['jid'] , " created"
       msg['args']['source'] = source
         
       if source['current_stream'] is not None:
-        stream = self.streams.find_one({'stream_id': source['current_stream'], 'status': {'$ne':'over'}})
+        stream = self.streams.find_one({'stream_id': source['current_stream'], 'status': {'$ne':'over'}}, {'_id': 0})
         
         if stream is not None:
           msg['args']['stream'] = stream
-   
+      
+      print msg
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
       # print sys.exc_info()
@@ -160,7 +165,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
       stream_data = {
         'stream_id': args['stream_id'],
-        'jid': args['from'],
+        'jid': args['jid'],
         'group_jid': args['group_jid'],
         'status': 'streaming',
         'device_status': 'ok',
@@ -176,21 +181,20 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'close_stamp': None
       }
       print "initializing stream "  + args['stream_id']
-      self.streams.insert(stream_data)
-      self.make_presence(pto=source, ptype='subscribe').send()
+      self.streams.insert(stream_data, manipulate=False)
       print args['stream_id'] , " initiated"
       
-      print "updating source " + args['from']
-      self.sources.update({'jid':args['from']}, {'$set':{'current_stream':args['stream_id']]}})
-      self.sources.update({'jid':args['from']}, {'$addToSet':{'streams':args['stream_id']}})
-      print args['from'] , " updated"
+      print "updating source " + args['jid']
+      self.sources.update({'jid':args['jid']}, {'$set':{'current_stream':args['stream_id']}})
+      self.sources.update({'jid':args['jid']}, {'$addToSet':{'streams':args['stream_id']}})
+      print args['jid'] , " updated"
  
       members = None
       group = self.groups.find_one({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
       if group is None:
         group_data = {
           'group_jid':args['group_jid'],
-          'status':'populated',
+          'status':'active',
           'centroid':args['latlng'],
           'hashtags':args['hashtags'],
           'stamp':stamp,
@@ -200,7 +204,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'banned':[]
         }
         print "creating group " + args['group_jid']
-        self.groups.insert(group_data)
+        self.groups.insert(group_data, manipulate=False)
         print args['group_jid'] , " created"
       else:
         # group_hashtags = group['hashtags'] + args['hashtags']
@@ -210,7 +214,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         
         group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
         members = []      
-        for m in members:
+        for m in group_members:
           member = {
             'jid': m['jid'],
             'stream_id': m['stream_id'],
@@ -247,7 +251,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     print "stream_pause"
     
     try:
-      stream = self.streams.find_one({'stream_id':args['stream_id']})
+      stream = self.streams.find_one({'stream_id':args['stream_id']}, {'_id': 0})
       
       if stream['status'] == 'over':
         raise Exception('stream is over')
@@ -265,10 +269,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       msg = {
         'func':'stream_pause_reply',
         'args': {
-          'stream': stream,
-          'delta': self.delta_over_timer
+          'stream': stream
          }
       }
+      if self.AUTOCLOSE:
+        msg['args']['delta'] = self.delta_over_time
+      
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except:
       traceback.print_exc()
@@ -277,9 +283,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
   def hnd_stream_resume(self, args):
     print "stream_resume"
+    print args
     
     try:
-      stream = self.streams.find_one({'stream_id':args['stream_id']})
+      stream = self.streams.find_one({'stream_id':args['stream_id']}, {'_id': 0})
       
       if stream['status'] == 'over':
         raise Exception('stream is over')
@@ -291,7 +298,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
       group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
       members = []
-      for m in members:
+      for m in group_members:
         member = {
           'jid': m['jid'],
           'stream_id': m['stream_id'],
@@ -337,13 +344,13 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         raise Exception('stream is already over')
       
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'over'}})
-      self.sources.update({'jid':args['from']}, {'$set':{'current_stream':None}})
+      self.sources.update({'jid':args['jid']}, {'$set':{'current_stream':None}})
       
       # leaving old group
       self.groups.update({'group_jid':stream['group_jid']}, {'$pull':{'members':stream['stream_id']}})
       group = self.groups.find_one({'group_jid':stream['group_jid']})
       if len(group['members']) == 0:
-        self.groups.update({'group_jid':stream['group_jid']}, 'status':'idle'})
+        self.groups.update({'group_jid':stream['group_jid']}, {'$set':{'status':'idle'}})
       
       msg = {
         'func':'stream_close_reply',
@@ -383,7 +390,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
       group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
       members = []
-      for m in members:
+      for m in group_members:
         if m['stream_id'] == stream['stream_id']:
           continue
         member = {
@@ -404,9 +411,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
       # leaving old group
       self.groups.update({'group_jid':current['group_jid']}, {'$pull':{'members':stream['stream_id']}})
-      current['members']remove(stream['stream_id'])
+      current['members'].remove(stream['stream_id'])
       if len(current['members']) == 0:
-        self.groups.update({'group_jid':stream['group_jid']}, 'status':'idle'})
+        self.groups.update({'group_jid':stream['group_jid']}, {'$set':{'status':'idle'}})
       
       msg = {
         'func':'group_join_reply',
@@ -444,7 +451,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       stamp = datetime.datetime.now().isoformat()      
       group_data = {
         'group_jid':args['group_jid'],
-        'status':'populated',
+        'status':'active',
         'centroid':stream['latlng'],
         'hashtags':stream['hashtags'],
         'stamp':stamp,
@@ -453,12 +460,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'members':[stream['stream_id']],
         'banned':[]
       }
-      self.groups.insert(group_data)
+      self.groups.insert(group_data, manipulate=False)
 
       self.groups.update({'group_jid':current['group_jid']}, {'$pull':{'members':stream['stream_id']}})
       current['members'].remove(stream['stream_id'])
       if len(current['members']) == 0:
-        self.groups.update({'group_jid':current['group_jid']}, 'status':'idle'})
+        self.groups.update({'group_jid':current['group_jid']}, {'$set':{'status':'idle'}})
       
       msg = {
         'func':'group_leave_reply',
@@ -484,12 +491,12 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
       # match latlng
       match = self.groups.find( { 'status':'active', 'latlng': son.SON([('$near', [lng, lat]), ('$maxDistance', 2)]) })
-      # print match.count()
+      print match.count()
       groups = []
       for g in match:
         d = {
           'group_jid': g['group_jid'],
-          'hashtags': g['hashtags']
+          'hashtags': g['hashtags'],
           'num_members': len(g['members'])
         }
         groups.append(d)
@@ -502,6 +509,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'matched_groups': groups
         }
       }
+    except:
+      traceback.print_exc()
       
   ##################################################
 
@@ -514,13 +523,13 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if stream is None:
         raise Exception('stream is over or does not exist')
     
-      group = self.groups.find_one({'group_jid':args['group_jid'], 'status':{'$ne':'idle'}}})
+      group = self.groups.find_one({'group_jid':args['group_jid'], 'status':{'$ne':'idle'}})
       if group is None:
         raise Exception('group is idle or does not exist')
       
       group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
       members = []
-      for m in members:
+      for m in group_members:
         member = {
           'jid': m['jid'],
           'stream_id': m['stream_id'],
@@ -609,10 +618,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
 
   ##################################################
   
-  def hnd_update_source_twitcasting_id(self, args):
+  def hnd_update_twitcasting_id(self, args):
     print "update_source_twitcasting_id"
     try:
-      self.sources.update({'jid':args['from']}, {'$set': {'twitcasting_id':args['twitcasting_id']}})
+      self.sources.update({'jid':args['jid']}, {'$set': {'twitcasting_id':args['twitcasting_id']}})
     except:
       traceback.print_exc()
 

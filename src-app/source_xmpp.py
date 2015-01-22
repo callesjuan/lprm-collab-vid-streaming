@@ -6,6 +6,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   '''
   CONSTANTS
   '''
+  DOMAIN = 'localhost'
   MAPPER_JID = 'comp-mapper@localhost/console'
   MUC_JID = 'conference.localhost'
 
@@ -21,7 +22,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.add_event_handler("message", self.handle_message)
     self.auto_authorize = True
 
-    self.JID = jid
+    self.JID = jid + '/lprm'
     self.pwd = pwd
     self.muc_nick = jid.split("@")[0]
     
@@ -64,10 +65,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
 
   def handle_func(self, str_func):
-    arr_func = str_func.split(" ")
-    func = getattr(self, arr_func[0])
-    arr_func.pop(0)
-    func(*arr_func)
+    try:
+      arr_func = str_func.split(" ")
+      func = getattr(self, arr_func[0])
+      arr_func.pop(0)
+      func(*arr_func)
+    except:
+      traceback.print_exc()
 
   def print_source(self):
     print self.source
@@ -97,9 +101,12 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       self.source = args['source']
       if self.twitcasting_id is None:
-        self.twitcasting_id = args['twitcasting_id']
+        self.twitcasting_id = self.source['twitcasting_id']
       if args.has_key('stream'):
         self.stream = args['stream']
+        print self.stream['stream_id'] , ' is ', self.stream['status']
+      else:
+        print 'no active or pending stream'
       self.stream_status_required = False
     except:
       traceback.print_exc()
@@ -111,6 +118,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print args
     try:
       self.stream = args['stream']
+      print 'streaming'
     except:
       traceback.print_exc()
 
@@ -121,8 +129,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print args
     try:
       self.stream = args['stream']
-      self.delta_over_time = args['delta_over_time']
-      print 'automatically closing after ' , self.delta_over_time , ' seconds'
+      print 'paused'
+      if args.has_key('delta'):
+        self.delta_over_time = args['delta']
+        print 'automatically closing after ' , self.delta_over_time , ' seconds'
     except:
       traceback.print_exc()
 
@@ -133,6 +143,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print args
     try:
       self.stream = args['stream']
+      print 'streaming'
     except:
       traceback.print_exc()
 
@@ -151,6 +162,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         self.media = None
         self.delta_over_time = None
         self.stream_status_required = True
+        print 'over'
     except:
       traceback.print_exc()
       
@@ -160,19 +172,24 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     print 'group_join_reply'
     self.stream['group_jid'] = args['group_jid']
     self.group_jid = args['group_jid']
+    print 'joined ' , self.group_jid
     
   ##################################################
    
   def hnd_group_leave_reply(self, args):
     print 'group_leave_reply'
+    old_group_jid = self.group_jid
     self.stream['group_jid'] = args['group_jid']
     self.group_jid = args['group_jid']
+    print 'left ' , old_group_jid
+    print 'joined ' , self.group_jid
 
   ##################################################
    
   def hnd_group_match_reply(self, args):
     print 'group_match_reply'
     self.matched_groups = args['matched_groups']
+    print 'correlated groups'
     print self.matched_groups
 
   ##################################################
@@ -219,7 +236,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.stream_ID = self.muc_nick + "__" + stamp
     
       if group_jid is None:
-        self.group_jid = self.stream_ID + "__" + stamp + "@" + self.MUC_JID
+        self.group_jid = self.stream_ID + "__" + stamp
       else:
         self.group_jid = group_jid
 
@@ -235,7 +252,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         }
       }
       
-      pto_jid = str(self.group_jid+"/"+self.muc_nick)
+      pto_jid = str(self.group_jid+"@"+self.MUC_JID+"/"+self.muc_nick)
       self.make_presence(pto=pto_jid).send()
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
@@ -250,6 +267,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       if self.stream is None:
         raise Exception('there is no active stream')
+      if self.stream['status'] == 'paused':
+        raise Exception('already paused')
     
       msg = {
         'func':'stream_pause',
@@ -271,6 +290,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         raise Exception('stream_status message is required')
       if self.stream is None:
         raise Exception('there is no pending stream')
+      if self.stream['status'] == 'streaming':
+        raise Exception('already streaming')
       
       msg = {
         'func':'stream_resume',
@@ -338,7 +359,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       now = datetime.datetime.now()
       stamp = now.strftime('%Y%m%d%H%M%S')
     
-      group_jid = self.stream['stream_id'] + '_' + stamp + '@' + self.MUC_JID
+      group_jid = self.stream['stream_id'] + '_' + stamp
     
       msg = {
         'func':'group_leave',
@@ -356,8 +377,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
 
   def group_match(self):
     # find groups matching geolocation + hashtags
-
+    
     try:
+      if self.hashtags is None:
+        raise Exception('hashtags missing')
+      if self.latlng is None:
+        raise Exception('latlng missing')
+    
       msg = {
         'func':'group_match',
         'args': {
@@ -431,7 +457,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
             'hashtags': hashtags
           }
         }
-        self.make_message(mto=self.MAPPER_JID)
+        self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
         self.stream['hashtags'] = hashtags
         print 'hashtags remotely updated'
       except:
@@ -439,17 +465,17 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       
   ##################################################
 
-  def update_source_twitcasting_id(self, twitcasting_id):
+  def update_twitcasting_id(self, twitcasting_id):
     self.twitcasting_id = twitcasting_id
 
     try:
       msg = {
-        'func':'update_source_twitcasting_id',
+        'func':'update_twitcasting_id',
         'args': {
           'twitcasting_id': twitcasting_id
         }
       }
-      self.make_message(mto=self.MAPPER_JID)
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "twitcasting_id remotely updated"
     except:
       traceback.print_exc()
@@ -480,7 +506,7 @@ def main(argv):
     
     for opt, arg in opts:
       if opt in ('-j', '--jid'):
-        jid = arg + "/lprm"
+        jid = arg
       if opt in ('-p', '--pwd'):
         pwd = arg
 
