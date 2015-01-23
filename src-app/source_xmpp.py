@@ -7,11 +7,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   CONSTANTS
   '''
   DOMAIN = 'localhost'
-  MAPPER_JID = 'comp-mapper@localhost/console'
+  MAPPER_JID = 'mapper@localhost/console'
   MUC_JID = 'conference.localhost'
 
   def __init__(self, jid, pwd):
-    sleekxmpp.ClientXMPP.__init__(self, jid, pwd)
+    self.JID = jid + '/device'
+    self.pwd = pwd  
+    sleekxmpp.ClientXMPP.__init__(self, self.JID, self.pwd)
     self.register_plugin('xep_0004') # Data forms
     self.register_plugin('xep_0030') # Service discovery
     self.register_plugin('xep_0045') # Multi-user chat
@@ -21,10 +23,17 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
     self.auto_authorize = True
-
-    self.JID = jid + '/lprm'
-    self.pwd = pwd
-    self.muc_nick = jid.split("@")[0]
+    
+    jid_tuple = jid.split("@")
+    self.muc_nick = jid_tuple[0]
+    self.DOMAIN = jid_tuple[1]
+    self.MUC_JID = 'conference.' + self.DOMAIN
+    self.MAPPER_JID = 'mapper@' + self.DOMAIN + '/console'
+    
+    print self.JID
+    print self.DOMAIN
+    print self.MUC_JID
+    print self.MAPPER_JID
     
     self.twitcasting_id = None
     
@@ -33,8 +42,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.hashtags = None
     self.latlng = None
     self.media = None
-    self.delta_over_time = None
     
+    self.delta_over_time = None
     self.matched_groups = None
     
     self.source = None
@@ -105,6 +114,14 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       if args.has_key('stream'):
         self.stream = args['stream']
         print self.stream['stream_id'] , ' is ', self.stream['status']
+        
+        self.stream_ID = self.stream['stream_id']
+        self.group_JID = self.stream['group_jid']
+        self.media = self.stream['media']
+        if self.hashtags is None:
+          self.hashtags = self.stream['hashtags']
+        if self.latlng is None:
+          self.latlng = self.stream['latlng']
       else:
         print 'no active or pending stream'
       self.stream_status_required = False
@@ -156,7 +173,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.stream = args['stream']
       if self.stream is None:
         self.stream_ID = None
-        self.group_jid = None
+        self.group_JID = None
         self.latlng = None
         self.hashtags = None
         self.media = None
@@ -170,19 +187,19 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
    
   def hnd_group_join_reply(self, args):
     print 'group_join_reply'
-    self.stream['group_jid'] = args['group_jid']
-    self.group_jid = args['group_jid']
-    print 'joined ' , self.group_jid
+    self.stream['group_jid'] = args['stream']['group_jid']
+    self.group_JID = args['stream']['group_jid']
+    print 'joined ' , self.group_JID
     
   ##################################################
    
   def hnd_group_leave_reply(self, args):
     print 'group_leave_reply'
-    old_group_jid = self.group_jid
-    self.stream['group_jid'] = args['group_jid']
-    self.group_jid = args['group_jid']
+    old_group_jid = self.group_JID
+    self.stream['group_jid'] = args['stream']['group_jid']
+    self.group_JID = args['stream']['group_jid']
     print 'left ' , old_group_jid
-    print 'joined ' , self.group_jid
+    print 'joined ' , self.group_JID
 
   ##################################################
    
@@ -236,15 +253,15 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.stream_ID = self.muc_nick + "__" + stamp
     
       if group_jid is None:
-        self.group_jid = self.stream_ID + "__" + stamp
+        self.group_JID = self.stream_ID + "__" + stamp
       else:
-        self.group_jid = group_jid
+        self.group_JID = group_jid
 
       msg = {
         'func':'stream_init',
         'args': {
           'stream_id': self.stream_ID,
-          'group_jid': self.group_jid,
+          'group_jid': self.group_JID,
           'hashtags': self.hashtags, # self.hashtags.replace("#",";")
           'latlng': self.latlng,
           'media': self.media,
@@ -252,10 +269,11 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         }
       }
       
-      pto_jid = str(self.group_jid+"@"+self.MUC_JID+"/"+self.muc_nick)
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      
+      pto_jid = str(self.group_JID+"@"+self.MUC_JID+"/"+self.muc_nick)
       self.make_presence(pto=pto_jid).send()
       
-      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "stream_initiated"
       
     except:
@@ -278,6 +296,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      self.make_presence(ptype='unavailable', pto=(self.group_JID+"@"+self.MUC_JID)).send()
       self.stream_status_required = True
     except:
       traceback.print_exc()
@@ -301,6 +320,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      
+      pto_jid = str(self.group_JID+"@"+self.MUC_JID+"/"+self.muc_nick)
+      self.make_presence(pto=pto_jid).send()
     except:
       traceback.print_exc()
 
@@ -321,6 +343,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       }
       
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+      self.make_presence(ptype='unavailable', pto=(self.group_JID+"@"+self.MUC_JID)).send()
+      self.stream_status_required = True
     except:
       traceback.print_exc()
       
@@ -332,7 +356,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       if self.stream is None:
         raise Exception('there is no active stream')
-      if group_JID == self.group_JID:
+      if group_JID == self.stream['group_jid']:
         raise Exception('stream is already in that group')
     
       msg = {
