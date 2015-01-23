@@ -157,9 +157,11 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
       print msg
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
-    except:
+    except Exception as e:
       # print sys.exc_info()
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
   
   ##################################################
  
@@ -172,10 +174,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     
       stamp = datetime.datetime.now().isoformat()
       
-      latlng = args['latlng'].split(',')
-      lat = float(latlng[0])
-      lng = float(latlng[1])
-      
       stream_data = {
         'stream_id': args['stream_id'],
         'jid': args['jid'],
@@ -185,7 +183,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'general_status': 'ok',
         'positive_ratings': 0,
         'negative_ratings': 0,
-        'latlng': [lng, lat],
+        'latlng': args['latlng'],
         'hashtags': args['hashtags'],
         'init_stamp': args['stamp'],
         'media': args['media'],
@@ -225,7 +223,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         self.groups.update({'group_jid':args['group_jid']}, {'$addToSet':{'members':args['stream_id']}}) # $push/$addToSet
         print args['group_jid'] , " updated"
         
-        group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
+        group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
         members = []      
         for m in group_members:
           member = {
@@ -253,9 +251,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if members is not None:
         msg['args']['members'] = members
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
-    except:
+    except Exception as e:
       traceback.print_exc()
-      msg = {'func':'message_exception_reply', 'args':{'exception':sys.exc_info()}}
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
@@ -289,8 +287,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         msg['args']['delta'] = self.delta_over_time
       
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
 
@@ -309,7 +309,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'streaming'}})
       stream['status'] = 'streaming'
       
-      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
+      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
       members = []
       for m in group_members:
         member = {
@@ -340,9 +340,11 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if self.AUTOCLOSE and self.over_timer.has_key(jid):
         self.over_timer[jid].cancel()
         self.over_timer.pop(jid, None) 
-        print 'timer unset'    
-    except:
+        print 'timer unset'
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
 
@@ -372,8 +374,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         }
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
 
@@ -401,7 +405,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       stream['group_jid'] = next['group_jid']
       self.groups.update({'group_jid':next['group_jid']}, {'$addToSet':{'members':stream['stream_id']}})
       
-      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
+      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
       members = []
       for m in group_members:
         if m['stream_id'] == stream['stream_id']:
@@ -437,8 +441,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
 
@@ -488,8 +494,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
 
@@ -498,18 +506,15 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     # find groups matching geolocation + hashtags
     
     try:
-      print args['latlng']
-      latlng = args['latlng'].split(',')
-      lat = float(latlng[0])
-      lng = float(latlng[1])
 
       # match latlng
-      match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', [lng, lat]), ('$maxDistance', 2)]) })
+      match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', args['latlng']), ('$maxDistance', float(args['radius']))]), 'group_jid': {'$ne':args['group_jid']} })
       groups = []
       for g in match:
         d = {
           'group_jid': g['group_jid'],
           'hashtags': g['hashtags'],
+          'centroid': g['centroid'],
           'num_members': len(g['members'])
         }
         groups.append(d)
@@ -525,17 +530,19 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
   ##################################################
 
   def hnd_group_fetch_members(self, args):
-    print "group_fetch"
+    print "group_fetch_members"
     # fetches information about a given group, specially its members
     
     try:
-      stream = self.streams.find_one({'stream_id':args['stream_id'], 'status':{'$ne':'over'}})
+      stream = self.streams.find_one({'stream_id':args['stream_id'], 'status':{'$ne':'over'}}, {'_id': 0})
       if stream is None:
         raise Exception('stream is over or does not exist')
     
@@ -543,7 +550,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if group is None:
         raise Exception('group is idle or does not exist')
       
-      group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
+      group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
       members = []
       for m in group_members:
         member = {
@@ -564,15 +571,17 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         raise Exception('group appears to be active but has no members, therefore it should be idle')
       
       msg = {
-        'func':'group_fetch_reply',
+        'func':'group_fetch_members_reply',
         'args': {
           'stream': stream,
           'members': members
         }
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
 
@@ -584,14 +593,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if stream is None:
         raise Exception('stream is over or does not exist')
         
-      # publish current geolocation + sensor data + battery level
-      latlng = args['latlng'].split(',')
-      lat = float(latlng[0])
-      lng = float(latlng[1])
-      
+      # publish current geolocation + sensor data + battery level      
       stamp = datetime.datetime.now().isoformat()
       data = {
-        'latlng': [lng, lat],
+        'latlng': args['latlng'],
         'stamp': stamp
       }
       self.streams.update({'stream_id':stream['stream_id']}, {'$set': data})
@@ -612,8 +617,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       print "centroid calculated"
       '''
 
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
   ##################################################
 
@@ -631,8 +638,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'stamp':stamp
       }
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':data})
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
   
@@ -640,8 +649,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     print "update_source_twitcasting_id"
     try:
       self.sources.update({'jid':args['jid']}, {'$set': {'twitcasting_id':args['twitcasting_id']}})
-    except:
+    except Exception as e:
       traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
 
   ##################################################
   ##################################################

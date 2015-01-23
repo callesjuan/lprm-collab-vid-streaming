@@ -45,6 +45,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     
     self.delta_over_time = None
     self.matched_groups = None
+    self.members = None
     
     self.source = None
     self.stream = None
@@ -208,6 +209,14 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.matched_groups = args['matched_groups']
     print 'correlated groups'
     print self.matched_groups
+    
+  ##################################################
+   
+  def hnd_group_fetch_members_reply(self, args):
+    print 'group_fetch_members_reply'
+    self.members = args['members']
+    print 'members'
+    print self.members
 
   ##################################################
   ##################################################
@@ -399,7 +408,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
 
   ##################################################
 
-  def group_match(self):
+  def group_match(self, radius):
     # find groups matching geolocation + hashtags
     
     try:
@@ -411,8 +420,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       msg = {
         'func':'group_match',
         'args': {
+          'group_jid': self.stream['group_jid'],
           'hashtags': self.hashtags,
-          'latlng': self.latlng
+          'latlng': self.latlng,
+          'radius': radius
         }
       }
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
@@ -421,7 +432,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       
   ##################################################
 
-  def group_fetch(self):
+  def group_fetch_members(self):
     # fetches information about a given group, specially its members
 
     try:
@@ -429,7 +440,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         raise Exception('there is no active stream')
     
       msg = {
-        'func':'group_fetch',
+        'func':'group_fetch_members',
         'args': {
           'stream_id':self.stream['stream_id'],
           'group_jid': self.stream['group_jid']
@@ -444,7 +455,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
   def update_latlng(self, latlng):
     # publish current geolocation + sensor data + battery level
     
-    self.latlng = latlng
+    latlng_array = latlng.split(',')
+    lat = float(latlng_array[0])
+    lng = float(latlng_array[1])
+    self.latlng = [lng, lat]
     
     if self.stream is None:
       print 'latlng locally updated'
@@ -454,7 +468,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
           'func':'update_latlng',
           'args': {
             'stream_id': self.stream['stream_id'],
-            'latlng': latlng
+            'latlng': self.latlng
           }
         }
         self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
