@@ -10,6 +10,8 @@ source|external_source->mapper/stream_lifecycle                   (presence)|tes
   group_fetch_members
   update_latlng
   update_hashtags
+  update_device_status
+  update_general_status
   stream_register**
   
 source|external_source|viewer->source|external_source/pings       (collaboration|notifications|minimap)|design  *source only

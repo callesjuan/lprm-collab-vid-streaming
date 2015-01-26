@@ -206,7 +206,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         group_data = {
           'group_jid':args['group_jid'],
           'status':'active',
-          'centroid':[lng, lat],
+          'centroid':args['latlng'],
           'hashtags':args['hashtags'],
           'stamp':stamp,
           'init_stamp':stamp,
@@ -223,9 +223,14 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         self.groups.update({'group_jid':args['group_jid']}, {'$addToSet':{'members':args['stream_id']}}) # $push/$addToSet
         print args['group_jid'] , " updated"
         
-        group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
+        # group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
+        group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
+        if group_members.count() == 0:
+          raise Exception('group appears to be active but has no members, therefore it should be idle')
         members = []      
         for m in group_members:
+          if m['stream_id'] == stream['stream_id']:
+            continue
           member = {
             'jid': m['jid'],
             'stream_id': m['stream_id'],
@@ -239,8 +244,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
             'stamp': m['stamp']
           }
           members.append(member)
-        if len(members) == 0:
-          raise Exception('group appears to be active but has no members, therefore it should be idle')
         
       msg = {
         'func':'stream_init_reply',
@@ -309,9 +312,13 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'streaming'}})
       stream['status'] = 'streaming'
       
-      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
+      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
+      if group_members.count() == 0:
+        raise Exception('group appears to be active but has no members, therefore it should be idle')
       members = []
       for m in group_members:
+        if m['stream_id'] == stream['stream_id']:
+          continue
         member = {
           'jid': m['jid'],
           'stream_id': m['stream_id'],
@@ -325,8 +332,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'stamp': m['stamp']
         }
         members.append(member)
-      if len(members) == 0:
-        raise Exception('group appears to be active but has no members, therefore it should be idle')
       
       msg = {
         'func':'stream_resume_reply',
@@ -405,7 +410,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       stream['group_jid'] = next['group_jid']
       self.groups.update({'group_jid':next['group_jid']}, {'$addToSet':{'members':stream['stream_id']}})
       
-      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
+      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
+      if group_members.count() == 0:
+        raise Exception('group appears to be active but has no members, therefore it should be idle')
       members = []
       for m in group_members:
         if m['stream_id'] == stream['stream_id']:
@@ -423,8 +430,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'stamp': m['stamp']
         }
         members.append(member)
-      if len(members) == 0:
-        raise Exception('group appears to be active but has no members, therefore it should be idle')
       
       # leaving old group
       self.groups.update({'group_jid':current['group_jid']}, {'$pull':{'members':stream['stream_id']}})
@@ -550,9 +555,13 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if group is None:
         raise Exception('group is idle or does not exist')
       
-      group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
+      group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
+      if group_members.count() == 0:
+        raise Exception('group appears to be active but has no members, therefore it should be idle')
       members = []
       for m in group_members:
+        if m['stream_id'] == stream['stream_id']:
+          continue
         member = {
           'jid': m['jid'],
           'stream_id': m['stream_id'],
@@ -566,9 +575,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'stamp': m['stamp']
         }
         members.append(member)
-        
-      if len(members) == 0:
-        raise Exception('group appears to be active but has no members, therefore it should be idle')
       
       msg = {
         'func':'group_fetch_members_reply',

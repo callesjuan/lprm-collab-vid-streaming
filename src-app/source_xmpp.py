@@ -22,6 +22,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.register_plugin('xep_0203') # Delayed delivery
     self.add_event_handler("session_start", self.handle_start)
     self.add_event_handler("message", self.handle_message)
+    # self.add_event_handler("groupchat_message", self.handle_muc_message)
     self.auto_authorize = True
     
     jid_tuple = jid.split("@")
@@ -42,6 +43,8 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.hashtags = None
     self.latlng = None
     self.media = None
+    self.device_status = None
+    self.general_status = None
     
     self.delta_over_time = None
     self.matched_groups = None
@@ -73,6 +76,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       except:
         traceback.print_exc()
     # self.make_message(mto=message["from"], mbody=message["body"]).send()
+    
+  def handle_muc_message(self, message):
+    print 'muc_message handler'
+    print message
 
   def handle_func(self, str_func):
     try:
@@ -137,6 +144,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     try:
       self.stream = args['stream']
       print 'streaming'
+      
+      pto_jid = str(self.group_JID+"@"+self.MUC_JID+"/"+self.muc_nick)
+      self.make_presence(pto=pto_jid).send()
     except:
       traceback.print_exc()
 
@@ -188,19 +198,29 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
    
   def hnd_group_join_reply(self, args):
     print 'group_join_reply'
+    old_group = self.group_JID
     self.stream['group_jid'] = args['stream']['group_jid']
     self.group_JID = args['stream']['group_jid']
     print 'joined ' , self.group_JID
+    
+    pto_jid = str(self.group_JID+"@"+self.MUC_JID+"/"+self.muc_nick)
+    self.make_presence(pto=pto_jid).send()
+    self.make_presence(ptype='unavailable', pto=str(old_group+"@"+self.MUC_JID)).send()
     
   ##################################################
    
   def hnd_group_leave_reply(self, args):
     print 'group_leave_reply'
+    old_group = self.group_JID
     old_group_jid = self.group_JID
     self.stream['group_jid'] = args['stream']['group_jid']
     self.group_JID = args['stream']['group_jid']
     print 'left ' , old_group_jid
     print 'joined ' , self.group_JID
+    
+    pto_jid = str(self.group_JID+"@"+self.MUC_JID+"/"+self.muc_nick)
+    self.make_presence(pto=pto_jid).send()
+    self.make_presence(ptype='unavailable', pto=str(old_group+"@"+self.MUC_JID)).send()
 
   ##################################################
    
@@ -217,12 +237,36 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     self.members = args['members']
     print 'members'
     print self.members
+    
+  ##################################################
+   
+  def hnd_ping_target(self, args):
+    print 'ping_target'
+    print args
+    
+  ##################################################
+   
+  def hnd_ping_danger(self, args):
+    print 'ping_danger'
+    print args
+    
+  ##################################################
+   
+  def hnd_ping_assist(self, args):
+    print 'ping_assist'
+    print args
+    
+  ##################################################
+   
+  def hnd_ping_onmyway(self, args):
+    print 'ping_onmyway'
+    print args
 
   ##################################################
   ##################################################
   ##################################################
   '''
-  MESSAGES
+  STREAM_LIFECYCLE MESSAGES
   '''
   ##################################################
   ##################################################
@@ -278,11 +322,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         }
       }
       
-      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
-      
-      pto_jid = str(self.group_JID+"@"+self.MUC_JID+"/"+self.muc_nick)
-      self.make_presence(pto=pto_jid).send()
-      
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()      
       print "stream_initiated"
       
     except:
@@ -357,6 +397,14 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
     except:
       traceback.print_exc()
       
+  ##################################################
+  ##################################################
+  ##################################################
+  '''
+  GROUP_LIFECYCLE MESSAGES
+  '''
+  ##################################################
+  ##################################################
   ##################################################
 
   def group_join(self, group_JID):
@@ -451,6 +499,14 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       traceback.print_exc()
 
   ##################################################
+  ##################################################
+  ##################################################
+  '''
+  STREAM_UPDATE MESSAGES
+  '''
+  ##################################################
+  ##################################################
+  ##################################################
 
   def update_latlng(self, latlng):
     # publish current geolocation + sensor data + battery level
@@ -500,6 +556,48 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
         print 'hashtags remotely updated'
       except:
         traceback.print_exc()
+        
+  ##################################################
+
+  def update_device_status(self, status, details = None):
+    # publish device_status update
+
+    try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+    
+      msg = {
+        'func':'update_device_status',
+        'args': {
+          'stream_id':self.stream['stream_id'],
+          'status': status,
+          'details': None
+        }
+      }
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      traceback.print_exc()
+      
+  ##################################################
+
+  def update_general_status(self, status, details = None):
+    # publish device_status update
+
+    try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+    
+      msg = {
+        'func':'update_general_status',
+        'args': {
+          'stream_id':self.stream['stream_id'],
+          'status': status,
+          'details': None
+        }
+      }
+      self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
+    except:
+      traceback.print_exc()     
       
   ##################################################
 
@@ -515,6 +613,125 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
       print "twitcasting_id remotely updated"
+    except:
+      traceback.print_exc()
+      
+  ##################################################
+  ##################################################
+  ##################################################
+  '''
+  PING MESSAGES
+  '''
+  ##################################################
+  ##################################################
+  ##################################################
+  
+  def ping_target(self, latlng, details = None):
+    # publish current geolocation + sensor data + battery level
+
+    try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+        
+      latlng_array = latlng.split(',')
+      lat = float(latlng_array[0])
+      lng = float(latlng_array[1])
+      target_latlng = [lng, lat]
+
+      msg = {
+        'func':'ping_target',
+        'args': {
+          'stream_id': self.stream['stream_id'],
+          'target_latlng': target_latlng,
+          'details': details
+        }
+      }
+      group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
+      print 'ping_target'
+      print group_jid
+      print msg
+      self.make_message(mto=group_jid, mbody=json.dumps(msg), mtype='groupchat').send()
+    except:
+      traceback.print_exc()
+      
+  ##################################################
+  
+  def ping_danger(self, latlng, details = None):
+    # publish current geolocation + sensor data + battery level
+
+    try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+        
+      latlng_array = latlng.split(',')
+      lat = float(latlng_array[0])
+      lng = float(latlng_array[1])
+      danger_latlng = [lng, lat]
+
+      msg = {
+        'func':'ping_danger',
+        'args': {
+          'stream_id': self.stream['stream_id'],
+          'danger_latlng': danger_latlng,
+          'details': details
+        }
+      }
+      group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
+      self.make_message(mto=group_jid, mbody=json.dumps(msg), mtype='groupchat').send()
+    except:
+      traceback.print_exc()
+      
+  ##################################################
+  
+  def ping_assist(self, latlng, details = None):
+    # publish current geolocation + sensor data + battery level
+
+    try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+        
+      latlng_array = latlng.split(',')
+      lat = float(latlng_array[0])
+      lng = float(latlng_array[1])
+      assist_latlng = [lng, lat]
+
+      msg = {
+        'func':'ping_assist',
+        'args': {
+          'stream_id': self.stream['stream_id'],
+          'assist_latlng': assist_latlng,
+          'details': details
+        }
+      }
+      group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
+      self.make_message(mto=group_jid, mbody=json.dumps(msg), mtype='groupchat').send()
+    except:
+      traceback.print_exc()
+      
+  ##################################################
+  
+  def ping_onmyway(self, latlng, details = None):
+    # publish current geolocation + sensor data + battery level
+
+    try:
+      if self.stream is None:
+        raise Exception('there is no active stream')
+        
+      latlng_array = latlng.split(',')
+      lat = float(latlng_array[0])
+      lng = float(latlng_array[1])
+      onmyway_latlng = [lng, lat]
+
+      msg = {
+        'func':'ping_onmyway',
+        'args': {
+          'stream_id': self.stream['stream_id'],
+          'onmyway_latlng': onmyway_latlng,
+          'details': details
+        }
+      }
+      group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
+      self.make_message(mto=group_jid, mbody=json.dumps(msg), mtype='groupchat').send()
     except:
       traceback.print_exc()
 
