@@ -513,7 +513,10 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     try:
 
       # match latlng
-      match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', args['latlng']), ('$maxDistance', float(args['radius']))]), 'group_jid': {'$ne':args['group_jid']} })
+      if args.has_key("group_jid"):
+        match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', args['latlng']), ('$maxDistance', float(args['radius']))]), 'group_jid': {'$ne':args['group_jid']} })
+      else:
+   	    match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', args['latlng']), ('$maxDistance', float(args['radius']))]) })
       groups = []
       for g in match:
         d = {

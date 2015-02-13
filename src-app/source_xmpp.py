@@ -468,12 +468,13 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       msg = {
         'func':'group_match',
         'args': {
-          'group_jid': self.stream['group_jid'],
           'hashtags': self.hashtags,
           'latlng': self.latlng,
           'radius': radius
         }
       }
+	  if self.stream is not None:
+	    msg['group_jid'] = self.stream['group_jid']
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
       traceback.print_exc()
