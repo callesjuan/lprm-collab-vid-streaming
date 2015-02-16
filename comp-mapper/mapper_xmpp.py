@@ -171,6 +171,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     try:
       if self.streams.find_one({'stream_id':args['stream_id']}) is not None:
         raise Exception('there is a stream with the same stream_id')
+   
+      if self.sources.find_one({'current_stream':args['stream_id']}) is not None:
+        raise Exception('source already has an active stream')
     
       stamp = datetime.datetime.now().isoformat()
       
@@ -229,7 +232,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           raise Exception('group appears to be active but has no members, therefore it should be idle')
         members = []      
         for m in group_members:
-          if m['stream_id'] == stream['stream_id']:
+          if m['stream_id'] == stream_data['stream_id']:
             continue
           member = {
             'jid': m['jid'],

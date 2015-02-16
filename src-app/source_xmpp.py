@@ -473,7 +473,7 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
           'radius': radius
         }
       }
-	  if self.stream is not None:
+      if self.stream is not None:
 	    msg['group_jid'] = self.stream['group_jid']
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()
     except:
