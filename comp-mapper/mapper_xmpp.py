@@ -9,6 +9,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   AUTOCLOSE = False
   DOMAIN = 'localhost'
   MUC_JID = 'conference.localhost'
+  
+  rooms = {}
 
   def __init__(self, jid, pwd, mongo_uri):
     self.JID = jid + '/console'
@@ -28,7 +30,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
     
     jid_tuple = jid.split("@")
     self.DOMAIN = jid_tuple[1]
-    self.MUC_JID = 'conference.' , self.DOMAIN
+    self.MUC_JID = 'conference.' + self.DOMAIN
 
     self.local_sources = {}
     self.local_groups = {}
@@ -51,6 +53,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.groups = self.db['groups']
       self.groups.ensure_index([('group_jid', pymongo.TEXT)], unique=True)
       self.groups.ensure_index([('centroid', pymongo.GEO2D)])
+	  
+      self.pings = self.db['pings']
 
     except:
       traceback.print_exc()
@@ -257,6 +261,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if members is not None:
         msg['args']['members'] = members
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+      
+      t = threading.Thread(target=self.join_room, args=(stream_data['group_jid'],))
+      t.start()
     except Exception as e:
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
@@ -344,6 +351,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         }
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+      
+      t = threading.Thread(target=self.join_room, args=(stream['group_jid'],))
+      t.start()
       
       if self.AUTOCLOSE and self.over_timer.has_key(jid):
         self.over_timer[jid].cancel()
@@ -449,6 +459,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
+      t = threading.Thread(target=self.join_room, args=(stream['group_jid'],))
+      t.start()
+      
     except Exception as e:
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
@@ -502,6 +515,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
+      t = threading.Thread(target=self.join_room, args=(args['group_jid'],))
+      t.start()
+      
     except Exception as e:
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
@@ -519,7 +535,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if args.has_key("group_jid"):
         match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', args['latlng']), ('$maxDistance', float(args['radius']))]), 'group_jid': {'$ne':args['group_jid']} })
       else:
-   	    match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', args['latlng']), ('$maxDistance', float(args['radius']))]) })
+        match = self.groups.find( { 'status':'active', 'centroid': son.SON([('$near', args['latlng']), ('$maxDistance', float(args['radius']))]) })
       groups = []
       for g in match:
         d = {
@@ -589,6 +605,32 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'members': members
         }
       }
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+    except Exception as e:
+      traceback.print_exc()
+      msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
+      self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+	  
+  ##################################################
+
+  def hnd_group_fetch_pings(self, args):
+    print "group_fetch_pings"
+    # fetches information about a given group, specially its members
+    
+    try:
+      pings = self.pings.find({'group_jid':args['group_jid'], 'stamp':{'$gte':args['since']}}, {'_id': 0})
+	  
+      result = []
+      for p in pings:
+		result.append(p)
+		
+      msg = {
+        'func':'group_fetch_pings_reply',
+        'args': {
+          'pings': result
+        }
+      }
+	  
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
     except Exception as e:
       traceback.print_exc()
@@ -665,7 +707,58 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
-
+      
+  def hnd_ping_target(self, args):
+    print "ping_target"
+    try:
+      group_jid = args['from'].split('@')[0]
+      ping = {
+        'group_jid':group_jid,
+        'type':'TARGET',
+        'stream_id':args['stream_id'],
+        'latlng':args['target_latlng'],
+        'details':args['details'],
+        'author':args['author'],
+        'stamp':args['stamp']
+      }
+      self.pings.insert(ping, manipulate=False)
+    except Exception as e:
+      traceback.print_exc()
+	  
+  def hnd_ping_assist(self, args):
+    print "ping_assist"
+    try:
+      group_jid = args['from'].split('@')[0]
+      ping = {
+        'group_jid':group_jid,
+        'type':'ASSIST',
+        'stream_id':args['stream_id'],
+        'latlng':args['assist_latlng'],
+        'details':args['details'],
+        'author':args['author'],
+        'stamp':args['stamp']
+      }
+      self.pings.insert(ping, manipulate=False)
+    except Exception as e:
+      traceback.print_exc()
+	  
+  def hnd_ping_danger(self, args):
+    print "ping_danger"
+    try:
+      group_jid = args['from'].split('@')[0]
+      ping = {
+        'group_jid':group_jid,
+        'type':'DANGER',
+        'stream_id':args['stream_id'],
+        'latlng':args['danger_latlng'],
+        'details':args['details'],
+        'author':args['author'],
+        'stamp':args['stamp']
+      }
+      self.pings.insert(ping, manipulate=False)
+    except Exception as e:
+      traceback.print_exc()
+	  
   ##################################################
   ##################################################
   ##################################################
@@ -675,7 +768,27 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   ##################################################
   ##################################################
   ##################################################
-    
+  
+  ##################################################
+  ##################################################
+  ##################################################
+  '''
+  ASYNC
+  '''
+  ##################################################
+  ##################################################
+  ##################################################
+  
+  def join_room(self, group_JID):
+    if not self.rooms.has_key(group_JID):
+      print group_JID , "@" , self.MUC_JID , "/mapper"
+      pto_jid = str(group_JID+"@"+self.MUC_JID+"/mapper")
+      self.make_presence(pto=pto_jid).send()
+      
+      self.rooms[group_JID] = True
+  
+  # def leave_room(group_JID):
+  
 '''
 CONSOLE
 '''
