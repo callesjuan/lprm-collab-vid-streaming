@@ -638,13 +638,17 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       lat = float(latlng_array[0])
       lng = float(latlng_array[1])
       target_latlng = [lng, lat]
+      
+      now = datetime.datetime.now()
+      stamp = now.strftime('%Y%m%d%H%M%S')
 
       msg = {
         'func':'ping_target',
         'args': {
           'stream_id': self.stream['stream_id'],
           'target_latlng': target_latlng,
-          'details': details
+          'details': details,
+          'stamp':stamp
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
@@ -668,13 +672,17 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       lat = float(latlng_array[0])
       lng = float(latlng_array[1])
       danger_latlng = [lng, lat]
+      
+      now = datetime.datetime.now()
+      stamp = now.strftime('%Y%m%d%H%M%S')
 
       msg = {
         'func':'ping_danger',
         'args': {
           'stream_id': self.stream['stream_id'],
           'danger_latlng': danger_latlng,
-          'details': details
+          'details': details,
+          'stamp':stamp
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
@@ -695,13 +703,17 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       lat = float(latlng_array[0])
       lng = float(latlng_array[1])
       assist_latlng = [lng, lat]
+      
+      now = datetime.datetime.now()
+      stamp = now.strftime('%Y%m%d%H%M%S')
 
       msg = {
         'func':'ping_assist',
         'args': {
           'stream_id': self.stream['stream_id'],
           'assist_latlng': assist_latlng,
-          'details': details
+          'details': details,
+          'stamp':stamp
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
@@ -722,13 +734,17 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       lat = float(latlng_array[0])
       lng = float(latlng_array[1])
       onmyway_latlng = [lng, lat]
+      
+      now = datetime.datetime.now()
+      stamp = now.strftime('%Y%m%d%H%M%S')
 
       msg = {
         'func':'ping_onmyway',
         'args': {
           'stream_id': self.stream['stream_id'],
           'onmyway_latlng': onmyway_latlng,
-          'details': details
+          'details': details,
+          'stamp':stamp
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
