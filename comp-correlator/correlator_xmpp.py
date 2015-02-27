@@ -64,9 +64,8 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
   '''
   ROUTINES/TASKS
   '''
-  def send_suggestions(self):
+  def calculate_centroids(self):
     # calculate group centroids
-    '''
     groups = self.db['groups'].find()
     for group in groups:
       print group['group_jid']
@@ -84,8 +83,8 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
       centroid_lat = sum_lat/count
       group_latlng = str(centroid_lat) + "," + str(centroid_lng)
       self.db['groups'].update({'group_jid':group['group_jid']}, {'$set' : {'latlng' : group_latlng}})
-    '''
-
+  
+  def send_suggestions(self):
     # cluster groups (group location, centroid, should be updated after its sources send update_location)
     # if it finds clusters then checks which group is more crowded and ancient, the pivot/master, finally it suggests members from the remaining groups to join it
     groups_iter = self.db['groups'].find()
@@ -152,7 +151,7 @@ def main(argv):
   
   global client
 
-  jid = "comp-correlator@localhost"
+  jid = "correlator@juancalles.ddns.net"
   pwd = "123"
   mongo_uri = "mongodb://localhost:27017"
 
@@ -166,6 +165,7 @@ def main(argv):
       # client.handle_func(msg_in)
       time.sleep(10)
       print "firing correlator"
+      client.calculate_centroids()
       client.send_suggestions()
       
       pass

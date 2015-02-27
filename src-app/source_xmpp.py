@@ -648,7 +648,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
           'stream_id': self.stream['stream_id'],
           'target_latlng': target_latlng,
           'details': details,
-          'stamp':stamp
+          'stamp':stamp,
+          'author':self.stream['jid'],
+          'group_jid':self.stream['group_jid'],
+          'type':'TARGET'
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
@@ -682,7 +685,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
           'stream_id': self.stream['stream_id'],
           'danger_latlng': danger_latlng,
           'details': details,
-          'stamp':stamp
+          'stamp':stamp,
+          'author':self.stream['jid'],
+          'group_jid':self.stream['group_jid'],
+          'type':'DANGER'
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
@@ -713,7 +719,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
           'stream_id': self.stream['stream_id'],
           'assist_latlng': assist_latlng,
           'details': details,
-          'stamp':stamp
+          'stamp':stamp,
+          'author':self.stream['jid'],
+          'group_jid':self.stream['group_jid'],
+          'type':'ASSIST'
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
@@ -744,7 +753,10 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
           'stream_id': self.stream['stream_id'],
           'onmyway_latlng': onmyway_latlng,
           'details': details,
-          'stamp':stamp
+          'stamp':stamp,
+          'author':self.stream['jid'],
+          'group_jid':self.stream['group_jid'],
+          'type':'ONMYWAY'
         }
       }
       group_jid = self.stream['group_jid'] + '@' + self.MUC_JID
