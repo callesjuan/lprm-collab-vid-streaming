@@ -231,7 +231,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         print args['group_jid'] , " updated"
         
         # group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}, 'stream_id':{'$ne':stream['stream_id']}})
-        group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
+        group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$eq':'streaming'}})
         if group_members.count() == 0:
           raise Exception('group appears to be active but has no members, therefore it should be idle')
         members = []      
@@ -322,7 +322,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'streaming'}})
       stream['status'] = 'streaming'
       
-      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
+      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$eq':'streaming'}})
       if group_members.count() == 0:
         raise Exception('group appears to be active but has no members, therefore it should be idle')
       members = []
@@ -423,7 +423,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       stream['group_jid'] = next['group_jid']
       self.groups.update({'group_jid':next['group_jid']}, {'$addToSet':{'members':stream['stream_id']}})
       
-      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$ne':'over'}})
+      group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$eq':'streaming'}})
       if group_members.count() == 0:
         raise Exception('group appears to be active but has no members, therefore it should be idle')
       members = []
@@ -577,7 +577,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if group is None:
         raise Exception('group is idle or does not exist')
       
-      group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$ne':'over'}})
+      group_members = self.streams.find({'group_jid':args['group_jid'], 'status':{'$eq':'streaming'}})
       if group_members.count() == 0:
         raise Exception('group appears to be active but has no members, therefore it should be idle')
       members = []
