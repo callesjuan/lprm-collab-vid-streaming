@@ -10,6 +10,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   DOMAIN = 'localhost'
   MUC_JID = 'conference.localhost'
   
+  LEAVE_INTERVAL = 35
+  
   rooms = {}
 
   def __init__(self, jid, pwd, mongo_uri):
@@ -90,6 +92,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       if stream is not None and stream['status'] == 'streaming':
         self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'paused'}})
         print 'got_offline stream_pause'
+        
+        t = threading.Timer(interval=self.LEAVE_INTERVAL, function=self.leave_room, args=(stream['group_jid'],))
+        t.start()
         
         if self.AUTOCLOSE and not self.over_timer.has_key(stream['jid']):
           self.over_timer[jid] = threading.Timer(self.delta_over_timer, self.autoclose, [jid], {})
@@ -300,6 +305,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         msg['args']['delta'] = self.delta_over_time
       
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+      
+      t = threading.Timer(interval=self.LEAVE_INTERVAL, function=self.leave_room, args=(stream['group_jid'],))
+      t.start()
     except Exception as e:
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
@@ -392,6 +400,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         }
       }
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
+      
+      t = threading.Timer(interval=self.LEAVE_INTERVAL, function=self.leave_room, args=(stream['group_jid'],))
+      t.start()
     except Exception as e:
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
@@ -462,6 +473,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       t = threading.Thread(target=self.join_room, args=(stream['group_jid'],))
       t.start()
       
+      t = threading.Timer(interval=self.LEAVE_INTERVAL, function=self.leave_room, args=(current['group_jid'],))
+      t.start()
+      
     except Exception as e:
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
@@ -516,6 +530,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.make_message(mto=args['from'], mbody=json.dumps(msg)).send()
       
       t = threading.Thread(target=self.join_room, args=(args['group_jid'],))
+      t.start()
+      
+      t = threading.Timer(interval=self.LEAVE_INTERVAL, function=self.leave_room, args=(current['group_jid'],))
       t.start()
       
     except Exception as e:
@@ -780,12 +797,28 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
   ##################################################
   
   def join_room(self, group_JID):
+    print self.rooms
     if not self.rooms.has_key(group_JID):
       print group_JID , "@" , self.MUC_JID , "/mapper"
       pto_jid = str(group_JID+"@"+self.MUC_JID+"/mapper")
       self.make_presence(pto=pto_jid).send()
       
-      self.rooms[group_JID] = True
+      self.rooms[group_JID] = 1
+    else:
+      self.rooms[group_JID] += 1
+      
+  def leave_room(self, group_JID):
+    if self.rooms.has_key(group_JID):
+      pto_jid = str(group_JID+"@"+self.MUC_JID)
+      iq = self['xep_0030'].get_items(jid=pto_jid)
+      items = iq['disco_items'].get_items()
+      print items
+      if len(items) == 1:
+        item = items.pop()
+        for e in item:
+          if e is not None and "mapper" in e:
+            self.make_presence(ptype='unavailable', pto=pto_jid).send()
+            del self.rooms[group_JID]
   
   # def leave_room(group_JID):
   
