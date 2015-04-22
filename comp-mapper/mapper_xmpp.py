@@ -223,6 +223,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
           'stamp':stamp,
           'init_stamp':stamp,
           'close_stamp':None,
+          'last_join_stamp':None,
           'members':[args['stream_id']],
           'banned':[]
         }
@@ -434,6 +435,9 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       stream['group_jid'] = next['group_jid']
       self.groups.update({'group_jid':next['group_jid']}, {'$addToSet':{'members':stream['stream_id']}})
       
+      stamp = datetime.datetime.now().isoformat()
+      self.groups.update({'group_jid':next['group_jid']}, {'$set':{'last_join_stamp':stamp}})
+      
       group_members = self.streams.find({'group_jid':stream['group_jid'], 'status':{'$eq':'streaming'}})
       if group_members.count() == 0:
         raise Exception('group appears to be active but has no members, therefore it should be idle')
@@ -511,6 +515,7 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         'stamp':stamp,
         'init_stamp':stamp,
         'close_stamp':None,
+        'last_join_stamp':None,
         'members':[stream['stream_id']],
         'banned':[]
       }
