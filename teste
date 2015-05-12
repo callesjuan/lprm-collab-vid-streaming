@@ -1,0 +1,14 @@
+python mapper_xmpp.py -j mapper@git.lprm.inf.ufes.br -p 123
+
+python correlator_xmpp.py -j correlator@git.lprm.inf.ufes.br -p 123
+
+python dumper.py
+
+python source_xmpp.py -j src2@git.lprm.inf.ufes.br -p 123
+stream_status
+update_twitcasting_id src2
+update_latlng -20.320098,-40.335447
+update_hashtags '#teste'
+stream_init twitcasting
+
+ping_target -20.321275,-40.334411 "vem"

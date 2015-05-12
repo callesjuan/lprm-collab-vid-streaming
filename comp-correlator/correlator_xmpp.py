@@ -67,19 +67,19 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
   ROUTINES/TASKS
   '''
   def calculate_centroids(self):
-    print "calculating centroids"
+    # print "calculating centroids"
     # calculate group centroids
     groups = self.db['groups'].find({'status':'active'})
     for group in groups:
-      print group['group_jid']
+      # print group['group_jid']
       members = self.db['sources'].find({'status':'streaming', 'group':group['group_jid']})
       if members.count() > 0:
         sum_lng = 0
         sum_lat = 0
         count = len(group['members'])
-        print "count " + str(count) + " " + str(members.count())
+        # print "count " + str(count) + " " + str(members.count())
         for member in members:
-          print member['latlng']
+          # print member['latlng']
           latlng = member['latlng']
           sum_lng += latlng[0]
           sum_lat += latlng[1]
@@ -87,17 +87,17 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
         centroid_lat = sum_lat/count
         group_latlng = str(centroid_lat) + "," + str(centroid_lng)
         self.db['groups'].update({'group_jid':group['group_jid']}, {'$set' : {'centroid' : group_latlng}})
-    print "calculated centroids"
+    # print "calculated centroids"
   
   def send_suggestions(self):
-    print "sending suggestions"
+    # print "sending suggestions"
     # cluster groups (group location, centroid, should be updated after its sources send update_location)
     # if it finds clusters then checks which group is more crowded and ancient, the pivot/master, finally it suggests members from the remaining groups to join it
     groups_iter = self.db['groups'].find({'status':'active'})
     groups_arr = []
     X_arr = []
     
-    print 'clustering with ' + str(groups_iter.count()) + ' groups'
+    # print 'clustering with ' + str(groups_iter.count()) + ' groups'
 
     i = 0
     for group in groups_iter:
@@ -162,7 +162,7 @@ class CorrelatorXMPP(sleekxmpp.ClientXMPP):
           except:
             print sys.exc_info()
 
-    print "sended suggestions"
+    # print "sended suggestions"
       
 
 '''
@@ -193,7 +193,11 @@ def main(argv):
       # msg_in = raw_input("> ")
       # client.handle_func(msg_in)
       time.sleep(10)
-      print "firing correlator"
+
+      if client.db.groups.count() == 0:
+        continue
+      
+      # print "firing correlator"
       client.calculate_centroids()
       client.send_suggestions()
       

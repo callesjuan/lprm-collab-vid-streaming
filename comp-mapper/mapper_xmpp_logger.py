@@ -57,6 +57,8 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.groups.ensure_index([('centroid', pymongo.GEO2D)])
 	  
       self.pings = self.db['pings']
+      
+      self.log = self.db['log']
 
     except:
       traceback.print_exc()
@@ -99,6 +101,13 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         if self.AUTOCLOSE and not self.over_timer.has_key(stream['jid']):
           self.over_timer[jid] = threading.Timer(self.delta_over_timer, self.autoclose, [jid], {})
           self.over_timer[jid].start()
+          
+        data = {
+          'stream':stream['stream_id'],
+          'message':'stream_pause',
+          'stamp':datetime.datetime.now().isoformat()
+        }
+        self.log.insert(data)
         
     except:
       traceback.print_exc()
@@ -113,6 +122,13 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
         self.streams.update({'stream_id':stream['stream_id']}, {'$set':{'status':'over'}})
         
         print 'stream closed'
+        
+        data = {
+          'stream':stream['stream_id'],
+          'message':'stream_close',
+          'stamp':datetime.datetime.now().isoformat()
+        }
+        self.log.insert(data)
     except:
       traceback.print_exc()
 
@@ -270,6 +286,14 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       
       t = threading.Thread(target=self.join_room, args=(stream_data['group_jid'],))
       t.start()
+      
+      data = {
+        'stream':args['stream_id'],
+        'message':'stream_init',
+        'stamp':datetime.datetime.now().isoformat(),
+        'group':args['group_jid']
+      }
+      self.log.insert(data)
     except Exception as e:
       traceback.print_exc()
       msg = {'func':'message_exception_reply', 'args':{'exception':e.args}}
@@ -780,9 +804,6 @@ class MapperXMPP(sleekxmpp.ClientXMPP):
       self.pings.insert(ping, manipulate=False)
     except Exception as e:
       traceback.print_exc()
-      
-  def hnd_notify_correlation(self, args):
-    pass
 	  
   ##################################################
   ##################################################

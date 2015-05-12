@@ -325,6 +325,9 @@ class SourceXMPP(sleekxmpp.ClientXMPP):
       self.make_message(mto=self.MAPPER_JID, mbody=json.dumps(msg)).send()      
       print "stream_initiated"
       
+      pto_jid = str(self.group_JID+"@"+self.MUC_JID+"/"+self.muc_nick)
+      self.make_presence(pto=pto_jid).send()
+      
     except:
       traceback.print_exc()
 
