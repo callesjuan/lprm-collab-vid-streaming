@@ -8,7 +8,10 @@ python source_xmpp.py -j src2@git.lprm.inf.ufes.br -p 123
 stream_status
 update_twitcasting_id src2
 update_latlng -20.320098,-40.335447
-update_hashtags '#teste'
-stream_init twitcasting
+update_hashtags '#teste1'
+stream_init twitcasting src2__20150511181255__20150511181255
+
+stream_status
+stream_resume
 
 ping_target -20.321275,-40.334411 "vem"
